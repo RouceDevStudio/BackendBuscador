@@ -26,20 +26,22 @@ const CONFIG = {
 // ==================== CORS DINÁMICO DESDE .env ====================
 const corsOptions = {
     origin: function (origin, callback) {
-        // Permitir requests sin origin (curl, Postman, mobile apps)
-        if (!origin) return callback(null, true);
-
         const allowedOrigin = CONFIG.VAR_URL
-            ? CONFIG.VAR_URL.replace(/\/$/, '') // quitar barra final si la hay
+            ? CONFIG.VAR_URL.replace(/\/$/, '')
             : null;
 
+        // Sin origin: puede ser same-origin, curl o Postman — permitir
+        if (!origin) return callback(null, true);
+
         if (!allowedOrigin) {
-            // Si no hay VAR_URL configurado, bloquear
+            // VAR_URL no configurado: bloquear cross-origin explícito
             console.warn(`⚠️  CORS bloqueado: VAR_URL no está configurado en .env`);
             return callback(new Error('CORS: VAR_URL no configurado'), false);
         }
 
-        if (origin === allowedOrigin) {
+        // Permitir si coincide exactamente O si el origin viene del mismo host del backend
+        const selfOrigin = CONFIG.SELF_PING_URL ? CONFIG.SELF_PING_URL.replace(/\/$/, '') : null;
+        if (origin === allowedOrigin || origin === selfOrigin) {
             return callback(null, true);
         }
 
@@ -435,7 +437,26 @@ async function multiWorkerSearch(keyword, filter) {
 // ==================== RUTAS DE LA API ====================
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    const htmlPath = path.join(__dirname, 'public', 'index.html');
+
+    // Leer el HTML e inyectar el meta tag con la URL del backend desde .env
+    const fs = require('fs');
+    fs.readFile(htmlPath, 'utf8', (err, html) => {
+        if (err) {
+            return res.status(500).send('Error cargando el frontend');
+        }
+
+        const backendUrl = (CONFIG.SELF_PING_URL || '').replace(/\/$/, '');
+
+        // Inyectar meta tag justo después de <head>
+        const injected = html.replace(
+            '<head>',
+            `<head>\n    <meta name="backend-url" content="${backendUrl}">`
+        );
+
+        res.setHeader('Content-Type', 'text/html');
+        res.send(injected);
+    });
 });
 
 app.get('/api/health', (req, res) => {
