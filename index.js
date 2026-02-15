@@ -437,26 +437,7 @@ async function multiWorkerSearch(keyword, filter) {
 // ==================== RUTAS DE LA API ====================
 
 app.get('/', (req, res) => {
-    const htmlPath = path.join(__dirname, 'public', 'index.html');
-
-    // Leer el HTML e inyectar el meta tag con la URL del backend desde .env
-    const fs = require('fs');
-    fs.readFile(htmlPath, 'utf8', (err, html) => {
-        if (err) {
-            return res.status(500).send('Error cargando el frontend');
-        }
-
-        const backendUrl = (CONFIG.SELF_PING_URL || '').replace(/\/$/, '');
-
-        // Inyectar meta tag justo después de <head>
-        const injected = html.replace(
-            '<head>',
-            `<head>\n    <meta name="backend-url" content="${backendUrl}">`
-        );
-
-        res.setHeader('Content-Type', 'text/html');
-        res.send(injected);
-    });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/api/health', (req, res) => {
@@ -464,9 +445,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        workers: CONFIG.WORKERS_COUNT,
-        frontendOrigin: CONFIG.VAR_URL || 'no configurado',
-        selfPingUrl: CONFIG.SELF_PING_URL || 'no configurado'
+        workers: CONFIG.WORKERS_COUNT
     });
 });
 
@@ -567,7 +546,7 @@ function stopSelfPing() {
 app.post('/api/ping/start', (req, res) => {
     if (pingInterval) return res.json({ message: 'Auto-ping ya está activo' });
     startSelfPing();
-    res.json({ message: 'Auto-ping iniciado', interval: CONFIG.SELF_PING_INTERVAL, url: CONFIG.SELF_PING_URL });
+    res.json({ message: 'Auto-ping iniciado', interval: CONFIG.SELF_PING_INTERVAL });
 });
 
 app.post('/api/ping/stop', (req, res) => {
@@ -578,7 +557,6 @@ app.post('/api/ping/stop', (req, res) => {
 app.get('/api/ping/status', (req, res) => {
     res.json({
         active: pingInterval !== null,
-        url: CONFIG.SELF_PING_URL,
         interval: CONFIG.SELF_PING_INTERVAL,
         intervalMinutes: CONFIG.SELF_PING_INTERVAL / 60000
     });
