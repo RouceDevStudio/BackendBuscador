@@ -1,770 +1,623 @@
 require('dotenv').config();
 const express = require('express');
-const cors    = require('cors');
-const axios   = require('axios');
+const cors = require('cors');
+const axios = require('axios');
 const cheerio = require('cheerio');
 const { URL } = require('url');
-const path    = require('path');
+const path = require('path');
+const { spawn } = require('child_process');
+const fs = require('fs').promises;
+const MongoClient = require('mongodb').MongoClient;
+const Redis = require('redis');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ── CONFIG ────────────────────────────────────────────────────────────────
-const CONFIG = {
-    SELF_PING_URL:      process.env.SELF_PING_URL || '',
-    VAR_URL:            process.env.VAR_URL || '',
-    SELF_PING_INTERVAL: 14 * 60 * 1000,
-    TIMEOUT:            13000,
-    UAS: [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0'
-    ]
-};
-const ua = () => CONFIG.UAS[Math.floor(Math.random() * CONFIG.UAS.length)];
-const ax = (cfg) => axios({ timeout: CONFIG.TIMEOUT, ...cfg });
+// ══════════════════════════════════════════════════════════════════════════
+// 🗄️ DATABASE CONNECTION
+// ══════════════════════════════════════════════════════════════════════════
 
-// ── CORS ──────────────────────────────────────────────────────────────────
-app.use(cors({
-    origin(origin, cb) {
-        const ok  = CONFIG.VAR_URL?.replace(/\/$/, '');
-        const self = CONFIG.SELF_PING_URL?.replace(/\/$/, '');
-        if (!origin || origin === ok || origin === self) return cb(null, true);
-        cb(new Error(`CORS: origen no permitido: ${origin}`), false);
-    },
-    methods: ['GET','POST','PUT','OPTIONS'],
-    allowedHeaders: ['Content-Type','Authorization'],
-    credentials: true
-}));
-app.options('*', cors());
-app.use(express.json());
-app.use(express.static('public'));
-app.use((req, _, next) => { console.log(`${req.method} ${req.path}`); next(); });
+let db = null;
+let redisClient = null;
 
-// ── UTILIDADES ────────────────────────────────────────────────────────────
-const SOURCE_MAP = {
-    'youtube.com':'YouTube','youtu.be':'YouTube',
-    'mediafire.com':'MediaFire',
-    'drive.google.com':'Google Drive','docs.google.com':'Google Docs',
-    'github.com':'GitHub','gist.github.com':'GitHub',
-    'reddit.com':'Reddit','old.reddit.com':'Reddit',
-    'stackoverflow.com':'Stack Overflow','stackexchange.com':'Stack Exchange','superuser.com':'Super User','askubuntu.com':'Ask Ubuntu',
-    'medium.com':'Medium','towardsdatascience.com':'Medium','betterhumans.pub':'Medium',
-    'en.wikipedia.org':'Wikipedia','es.wikipedia.org':'Wikipedia','wikipedia.org':'Wikipedia',
-    'news.ycombinator.com':'Hacker News',
-    'archive.org':'Archive.org',
-    'openlibrary.org':'Open Library',
-    'books.google.com':'Google Books',
-    'npmjs.com':'npm',
-    'dev.to':'DEV.to',
-    'gitlab.com':'GitLab',
-    'bitbucket.org':'Bitbucket',
-    'codepen.io':'CodePen',
-    'replit.com':'Replit',
-    'pastebin.com':'Pastebin',
-    'slideshare.net':'SlideShare',
-    'scribd.com':'Scribd',
-    'issuu.com':'Issuu',
-    'academia.edu':'Academia',
-    'researchgate.net':'ResearchGate',
-    'arxiv.org':'arXiv',
-    'twitter.com':'Twitter','x.com':'Twitter',
-    'linkedin.com':'LinkedIn',
-    'pinterest.com':'Pinterest',
-    'twitch.tv':'Twitch',
-    'vimeo.com':'Vimeo',
-    'dailymotion.com':'Dailymotion',
-    'soundcloud.com':'SoundCloud',
-    'bandcamp.com':'Bandcamp',
-    'spotify.com':'Spotify',
-    'quora.com':'Quora',
-    'producthunt.com':'Product Hunt',
-    'alternativeto.net':'AlternativeTo'
-};
-
-function srcName(rawUrl) {
+async function connectDatabases() {
     try {
-        const h = new URL(rawUrl).hostname.replace(/^www\./, '');
-        return SOURCE_MAP[h] || h.split('.').slice(-2).join('.');
-    } catch { return 'Web'; }
-}
-
-function mkResult(title, url, desc, extra = {}) {
-    if (!title || !url) return null;
-    try { new URL(url); } catch { return null; }
-    return { title: title.trim().substring(0, 250), url, description: (desc || '').trim().substring(0, 400), source: srcName(url), ...extra };
-}
-
-// ── FUENTES ───────────────────────────────────────────────────────────────
-
-// DDG — selector actualizado (usa .result en vez de .result__body en versiones recientes)
-async function ddg(query, page = 1) {
-    const off = (page - 1) * 10;
-    try {
-        const res = await ax({ method: 'GET', url: 'https://html.duckduckgo.com/html/',
-            params: { q: query, s: off, dc: off + 1, v: 'l', o: 'json', api: 'd.js' },
-            headers: { 'User-Agent': ua(), 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8', 'Referer': 'https://duckduckgo.com/', 'DNT': '1' }
-        });
-        const $ = cheerio.load(res.data);
-        const results = [];
-
-        // Intentar múltiples selectores — DDG cambia el HTML con frecuencia
-        const selectors = ['.result__body', '.result', '.web-result', '[data-result]'];
-        let found = false;
-
-        for (const sel of selectors) {
-            const els = $(sel);
-            if (els.length === 0) continue;
-            found = true;
-
-            els.each((_, el) => {
-                // Intentar múltiples formas de extraer título
-                const title = $(el).find('h2, .result__title, .result__a, a[href]').first().text().trim()
-                           || $(el).find('a').first().text().trim();
-
-                // Extraer URL — DDG puede tenerla en href directo o en data-href
-                let link = $(el).find('a.result__a, h2 a, .result__title a').first().attr('href')
-                        || $(el).find('a[href^="http"]').first().attr('href')
-                        || $(el).find('a').first().attr('href') || '';
-
-                // DDG a veces usa /l/?uddg= como redirect
-                if (link.includes('/l/?')) {
-                    try { link = new URL('https://duckduckgo.com' + link).searchParams.get('uddg') || link; } catch {}
-                }
-                if (link && !link.startsWith('http')) link = '';
-
-                const desc = $(el).find('.result__snippet, .result__body p, p').first().text().trim();
-
-                const r = mkResult(title, link, desc, { engine: 'DuckDuckGo' });
-                if (r) results.push(r);
+        // MongoDB
+        if (process.env.MONGODB_URI) {
+            const client = await MongoClient.connect(process.env.MONGODB_URI, {
+                useNewUrlParser: true,
+                useUnifiedTopology: true
             });
-            if (results.length > 0) break;
+            db = client.db(process.env.MONGODB_DB_NAME || 'nexus_search');
+            console.log('✅ MongoDB conectado');
+            
+            // Crear índices
+            await db.collection('searches').createIndex({ query: 1 });
+            await db.collection('searches').createIndex({ timestamp: -1 });
+            await db.collection('clicks').createIndex({ query: 1, url: 1 });
         }
 
-        // Si ningún selector funcionó, intentar extraer links directamente
-        if (!found || results.length === 0) {
-            $('a[href^="http"]').each((_, el) => {
-                const href  = $(el).attr('href') || '';
-                const title = $(el).text().trim();
-                if (!href.includes('duckduckgo.com') && title.length > 10) {
-                    const r = mkResult(title, href, '', { engine: 'DuckDuckGo' });
-                    if (r) results.push(r);
-                }
+        // Redis
+        if (process.env.REDIS_HOST) {
+            redisClient = Redis.createClient({
+                host: process.env.REDIS_HOST,
+                port: process.env.REDIS_PORT || 6379,
+                password: process.env.REDIS_PASSWORD
             });
+            
+            redisClient.on('error', (err) => console.error('Redis Error:', err));
+            await redisClient.connect();
+            console.log('✅ Redis conectado');
         }
-
-        return results;
-    } catch (e) { console.error('[DDG]', e.message); return []; }
+    } catch (error) {
+        console.warn('⚠️  Base de datos no disponible:', error.message);
+    }
 }
 
-// Bing — múltiples selectores por si cambia el HTML
-async function bing(query, offset = 0) {
-    try {
-        const res = await ax({ method: 'GET', url: 'https://www.bing.com/search',
-            params: { q: query, first: offset + 1, count: 20, setlang: 'es' },
-            headers: { 'User-Agent': ua(), 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8', 'Cache-Control': 'no-cache', 'Upgrade-Insecure-Requests': '1' }
-        });
-        const $ = cheerio.load(res.data);
-        const results = [];
+// ══════════════════════════════════════════════════════════════════════════
+// 🧠 NEXUS AI BRAIN - SISTEMA NEURONAL MEJORADO
+// ══════════════════════════════════════════════════════════════════════════
 
-        $('.b_algo, li.b_algo').each((_, el) => {
-            const title = $(el).find('h2').text().trim() || $(el).find('h3').text().trim();
-            const link  = $(el).find('h2 a, h3 a').attr('href') || $(el).find('a[href^="http"]').first().attr('href');
-            const desc  = $(el).find('.b_caption p').text().trim()
-                       || $(el).find('.b_algoSlug').text().trim()
-                       || $(el).find('p').first().text().trim();
-            const r = mkResult(title, link, desc, { engine: 'Bing' });
-            if (r) results.push(r);
-        });
-        return results;
-    } catch (e) { console.error('[Bing]', e.message); return []; }
-}
+class NexusAIBrain {
+    constructor() {
+        this.ready = false;
+        this.stats = { 
+            queries: 0, 
+            learned: 0, 
+            avgResponseTime: 0,
+            totalImprovement: 0 
+        };
+        this.learningData = new Map();
+        this.initBrain();
+    }
 
-// Wikipedia ES + EN en paralelo
-async function wikipedia(kw) {
-    try {
-        const calls = ['es','en'].map(lang =>
-            ax({ method: 'GET', url: `https://${lang}.wikipedia.org/w/api.php`,
-                params: { action:'query', list:'search', srsearch: kw, srlimit: 10, format:'json', srprop:'snippet|size|wordcount' },
-                headers: { 'User-Agent': ua() }
-            }).then(r => (r.data?.query?.search || []).map(i => mkResult(
-                i.title,
-                `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(i.title.replace(/ /g,'_'))}`,
-                i.snippet.replace(/<[^>]+>/g,'').replace(/&[a-z]+;/g,''),
-                { engine: 'Wikipedia', source: `Wikipedia ${lang.toUpperCase()}` }
-            ))).catch(() => [])
-        );
-        return (await Promise.all(calls)).flat().filter(Boolean);
-    } catch (e) { console.error('[Wikipedia]', e.message); return []; }
-}
-
-// YouTube scraping
-async function youtube(kw) {
-    try {
-        const res = await ax({ method: 'GET', url: `https://www.youtube.com/results`,
-            params: { search_query: kw, hl: 'es' },
-            headers: { 'User-Agent': ua(), 'Accept-Language': 'es-ES,es;q=0.9' }
-        });
-        const $ = cheerio.load(res.data);
-        const results = [];
-        for (const script of $('script').toArray()) {
-            const c = $(script).html() || '';
-            if (!c.includes('ytInitialData')) continue;
-            try {
-                const m = c.match(/ytInitialData\s*=\s*(\{.+?\});\s*(?:<\/script|var |window\.)/s);
-                if (!m) continue;
-                const data = JSON.parse(m[1]);
-                const items = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
-                    ?.sectionListRenderer?.contents?.flatMap(s => s?.itemSectionRenderer?.contents || []) || [];
-                items.forEach(item => {
-                    const v = item?.videoRenderer;
-                    if (!v?.videoId) return;
-                    results.push(mkResult(
-                        v.title?.runs?.[0]?.text,
-                        `https://www.youtube.com/watch?v=${v.videoId}`,
-                        v.descriptionSnippet?.runs?.map(r=>r.text).join('') || `${v.ownerText?.runs?.[0]?.text||''} · ${v.viewCountText?.simpleText||''}`,
-                        { engine: 'YouTube', source: 'YouTube', thumbnail: v.thumbnail?.thumbnails?.pop()?.url }
-                    ));
-                });
-            } catch (e) { console.error('[YouTube parse]', e.message); }
-            break;
-        }
-        return results.filter(Boolean);
-    } catch (e) { console.error('[YouTube]', e.message); return []; }
-}
-
-// GitHub: repos + issues + topics
-async function github(kw) {
-    const h = { 'Accept':'application/vnd.github.v3+json', 'User-Agent': ua() };
-    if (process.env.GITHUB_TOKEN) h['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
-    const [repos, issues, topics] = await Promise.allSettled([
-        ax({ method:'GET', url:'https://api.github.com/search/repositories', params:{ q:kw, sort:'stars', order:'desc', per_page:20 }, headers: h }),
-        ax({ method:'GET', url:'https://api.github.com/search/issues',       params:{ q:`${kw} type:issue`, sort:'reactions', per_page:10 }, headers: h }),
-        ax({ method:'GET', url:'https://api.github.com/search/topics',       params:{ q:kw, per_page:5 }, headers:{ ...h, Accept:'application/vnd.github.mercy-preview+json' } })
-    ]);
-    const results = [];
-    if (repos.status==='fulfilled') repos.value.data.items?.forEach(r => results.push(mkResult(
-        r.full_name, r.html_url,
-        `⭐${r.stargazers_count} · ${r.language||'?'} · 🍴${r.forks_count} · ${r.description||''}`,
-        { engine:'GitHub' }
-    )));
-    if (issues.status==='fulfilled') issues.value.data.items?.forEach(i => results.push(mkResult(
-        `[Issue] ${i.title}`, i.html_url, i.body?.substring(0,200)||'', { engine:'GitHub' }
-    )));
-    if (topics.status==='fulfilled') topics.value.data.items?.forEach(t => results.push(mkResult(
-        `[Topic] ${t.name}`, `https://github.com/topics/${t.name}`,
-        t.short_description||t.description||'', { engine:'GitHub', source:'GitHub' }
-    )));
-    return results.filter(Boolean);
-}
-
-// GitLab public API
-async function gitlab(kw) {
-    try {
-        const res = await ax({ method:'GET', url:'https://gitlab.com/api/v4/projects',
-            params: { search: kw, order_by:'stars', sort:'desc', per_page:10, visibility:'public' },
-            headers: { 'User-Agent': ua() }
-        });
-        return (res.data||[]).map(p => mkResult(
-            p.name_with_namespace, p.web_url,
-            `⭐${p.star_count} · 🍴${p.forks_count} · ${p.description||'Sin descripción'}`,
-            { engine:'GitLab', source:'GitLab' }
-        )).filter(Boolean);
-    } catch (e) { console.error('[GitLab]', e.message); return []; }
-}
-
-// Reddit: posts + subreddits
-async function reddit(kw) {
-    const [posts, subs] = await Promise.allSettled([
-        ax({ method:'GET', url:'https://www.reddit.com/search.json',
-            params:{ q:kw, limit:25, sort:'relevance', type:'link' },
-            headers:{ 'User-Agent':'SearchAggregator/3.0' } }),
-        ax({ method:'GET', url:'https://www.reddit.com/search.json',
-            params:{ q:kw, limit:10, sort:'relevance', type:'sr' },
-            headers:{ 'User-Agent':'SearchAggregator/3.0' } })
-    ]);
-    const results = [];
-    if (posts.status==='fulfilled') posts.value.data?.data?.children?.forEach(p => {
-        const d = p.data;
-        results.push(mkResult(d.title, `https://reddit.com${d.permalink}`,
-            `r/${d.subreddit} · 👍${d.score} · 💬${d.num_comments}${d.selftext?' · '+d.selftext.substring(0,120):''}`,
-            { engine:'Reddit' }));
-    });
-    if (subs.status==='fulfilled') subs.value.data?.data?.children?.forEach(s => {
-        const d = s.data;
-        results.push(mkResult(`r/${d.display_name}`, `https://reddit.com${d.url}`,
-            `👥${(d.subscribers||0).toLocaleString()} · ${d.public_description?.substring(0,150)||d.title||''}`,
-            { engine:'Reddit' }));
-    });
-    return results.filter(Boolean);
-}
-
-// StackExchange: SO + SuperUser + AskUbuntu
-async function stackoverflow(kw) {
-    const sites = ['stackoverflow','superuser','askubuntu'];
-    const calls = sites.map(site =>
-        ax({ method:'GET', url:'https://api.stackexchange.com/2.3/search/advanced',
-            params:{ q:kw, site, sort:'relevance', order:'desc', pagesize:12 },
-            headers:{ 'User-Agent': ua() }
-        }).then(r => (r.data?.items||[]).map(i => mkResult(
-            i.title, i.link,
-            `✅${i.answer_count} resp · 👁${i.view_count} vistas · Score:${i.score} · [${(i.tags||[]).slice(0,3).join(', ')}]`,
-            { engine:'StackOverflow', source: site==='stackoverflow'?'Stack Overflow':site==='superuser'?'Super User':'Ask Ubuntu' }
-        ))).catch(() => [])
-    );
-    return (await Promise.all(calls)).flat().filter(Boolean);
-}
-
-// HackerNews stories + best comments
-async function hackernews(kw) {
-    const [stories, comments] = await Promise.allSettled([
-        ax({ method:'GET', url:'https://hn.algolia.com/api/v1/search',
-            params:{ query:kw, hitsPerPage:20, tags:'story' }, headers:{ 'User-Agent': ua() } }),
-        ax({ method:'GET', url:'https://hn.algolia.com/api/v1/search',
-            params:{ query:kw, hitsPerPage:10, tags:'comment', numericFilters:'points>5' }, headers:{ 'User-Agent': ua() } })
-    ]);
-    const results = [];
-    if (stories.status==='fulfilled') stories.value.data?.hits?.forEach(h => {
-        if (!h.title) return;
-        results.push(mkResult(h.title, h.url||`https://news.ycombinator.com/item?id=${h.objectID}`,
-            `⬆️${h.points||0} · 💬${h.num_comments||0} · ${h.author}`, { engine:'HackerNews' }));
-    });
-    if (comments.status==='fulfilled') comments.value.data?.hits?.forEach(h => {
-        if (!h.comment_text) return;
-        results.push(mkResult(`[HN] ${kw}`, `https://news.ycombinator.com/item?id=${h.objectID}`,
-            h.comment_text.replace(/<[^>]+>/g,'').substring(0,200), { engine:'HackerNews' }));
-    });
-    return results.filter(Boolean);
-}
-
-// OpenLibrary + Google Books
-async function books(kw) {
-    const [ol, gb] = await Promise.allSettled([
-        ax({ method:'GET', url:'https://openlibrary.org/search.json',
-            params:{ q:kw, limit:12, fields:'title,author_name,first_publish_year,key,subject' },
-            headers:{ 'User-Agent': ua() } }),
-        ax({ method:'GET', url:'https://www.googleapis.com/books/v1/volumes',
-            params:{ q:kw, maxResults:12, printType:'all', orderBy:'relevance' } })
-    ]);
-    const results = [];
-    if (ol.status==='fulfilled') ol.value.data?.docs?.forEach(b => {
-        if (!b.title) return;
-        results.push(mkResult(b.title, `https://openlibrary.org${b.key}`,
-            `📚 ${(b.author_name||['?']).join(', ')} · ${b.first_publish_year||'?'}${b.subject?' · '+b.subject.slice(0,3).join(', '):''}`,
-            { engine:'Books', source:'Open Library' }));
-    });
-    if (gb.status==='fulfilled') gb.value.data?.items?.forEach(b => {
-        const i = b.volumeInfo;
-        if (!i?.title) return;
-        results.push(mkResult(i.title, i.infoLink||`https://books.google.com/books?id=${b.id}`,
-            `📖 ${(i.authors||['?']).join(', ')} · ${i.publishedDate||'?'} · ${i.description?.substring(0,100)||''}`,
-            { engine:'Books', source:'Google Books' }));
-    });
-    return results.filter(Boolean);
-}
-
-// Archive.org por tipo de media
-async function archive(kw) {
-    const types = [
-        { mt:'texts',   icon:'📄' },
-        { mt:'movies',  icon:'🎬' },
-        { mt:'audio',   icon:'🎵' },
-        { mt:'software',icon:'💾' }
-    ];
-    const calls = types.map(({ mt, icon }) =>
-        ax({ method:'GET', url:'https://archive.org/advancedsearch.php',
-            params:{ q:`${kw} AND mediatype:${mt}`, fl:'identifier,title,description,mediatype,downloads', rows:8, output:'json', sort:'downloads desc' },
-            headers:{ 'User-Agent': ua() }
-        }).then(r => (r.data?.response?.docs||[]).map(item => {
-            const t = Array.isArray(item.title) ? item.title[0] : item.title;
-            const d = Array.isArray(item.description) ? item.description[0] : item.description;
-            return mkResult(t, `https://archive.org/details/${item.identifier}`,
-                `${icon} Archive.org · ${mt} · ⬇️${item.downloads||0} · ${d?String(d).substring(0,120):''}`,
-                { engine:'Archive', source:'Archive.org' });
-        })).catch(() => [])
-    );
-    return (await Promise.all(calls)).flat().filter(Boolean);
-}
-
-// npm registry
-async function npm(kw) {
-    try {
-        const res = await ax({ method:'GET', url:'https://registry.npmjs.org/-/v1/search',
-            params:{ text:kw, size:15 }, headers:{ 'User-Agent': ua() } });
-        return (res.data?.objects||[]).map(p => {
-            const pkg = p.package;
-            return mkResult(pkg.name, `https://npmjs.com/package/${pkg.name}`,
-                `📦 v${pkg.version} · ${Math.round((p.score?.detail?.popularity||0)*100)}% popular · ${pkg.description||''}`,
-                { engine:'NPM', source:'npm' });
-        }).filter(Boolean);
-    } catch (e) { console.error('[npm]', e.message); return []; }
-}
-
-// DEV.to API pública
-async function devto(kw) {
-    try {
-        const [tag, search] = await Promise.allSettled([
-            ax({ method:'GET', url:'https://dev.to/api/articles', params:{ per_page:15, tag:kw.split(' ')[0], top:1 }, headers:{ 'User-Agent': ua() } }),
-            ax({ method:'GET', url:'https://dev.to/api/articles', params:{ per_page:10, username:undefined }, headers:{ 'User-Agent': ua() } })
-        ]);
-        const results = [];
-        if (tag.status==='fulfilled') tag.value.data?.forEach(a => {
-            results.push(mkResult(a.title, a.url||`https://dev.to${a.path||''}`,
-                `📝 DEV.to · ❤️${a.positive_reactions_count} · 💬${a.comments_count} · ${a.description||a.tag_list?.join(',')||''}`,
-                { engine:'DEVto', source:'DEV.to' }));
-        });
-        return results.filter(Boolean);
-    } catch (e) { console.error('[DEV.to]', e.message); return []; }
-}
-
-// MediaFire — múltiples estrategias combinadas
-async function mediafire(kw) {
-    const queries = [
-        `site:mediafire.com/file ${kw}`,
-        `site:mediafire.com ${kw}`,
-        `"mediafire.com/file" "${kw}"`,
-        `mediafire "${kw}" download`,
-        `mediafire descargar "${kw}"`,
-        `"mediafire" "${kw}" gratis`,
-    ];
-    const calls = [
-        ddg(queries[0]), ddg(queries[1]), ddg(queries[2]),
-        bing(queries[0]), bing(queries[3]), bing(queries[5]),
-        ddg(queries[3]), ddg(queries[4])
-    ];
-    const all = (await Promise.allSettled(calls))
-        .flatMap(r => r.status==='fulfilled' ? r.value : [])
-        .filter(r => r?.url?.includes('mediafire.com'))
-        .map(r => ({ ...r, source:'MediaFire', engine:'MediaFire' }));
-    return all;
-}
-
-// Quora scraping básico via DDG
-async function quora(kw) {
-    const results = await ddg(`site:quora.com ${kw}`);
-    return results.filter(r => r.url.includes('quora.com'))
-        .map(r => ({ ...r, source:'Quora', engine:'Quora' }));
-}
-
-// arXiv — artículos académicos
-async function arxiv(kw) {
-    try {
-        const res = await ax({ method:'GET', url:'https://export.arxiv.org/api/query',
-            params:{ search_query:`all:${kw}`, start:0, max_results:10, sortBy:'relevance', sortOrder:'descending' },
-            headers:{ 'User-Agent': ua() }
-        });
-        const $ = cheerio.load(res.data, { xmlMode: true });
-        const results = [];
-        $('entry').each((_, el) => {
-            const title   = $('title', el).text().trim();
-            const url     = $('id', el).text().trim();
-            const summary = $('summary', el).text().trim().substring(0, 200);
-            const authors = $('author name', el).map((_, a) => $(a).text()).get().slice(0,3).join(', ');
-            results.push(mkResult(title, url, `📊 arXiv · ${authors} · ${summary}`, { engine:'arXiv', source:'arXiv' }));
-        });
-        return results.filter(Boolean);
-    } catch (e) { console.error('[arXiv]', e.message); return []; }
-}
-
-// Vimeo — videos alternativos a YouTube
-async function vimeo(kw) {
-    const results = await ddg(`site:vimeo.com ${kw}`);
-    return results.filter(r => r.url.includes('vimeo.com'))
-        .map(r => ({ ...r, source:'Vimeo', engine:'Vimeo' }));
-}
-
-// ── EXPANSIÓN DE QUERIES ──────────────────────────────────────────────────
-function expand(kw) {
-    return {
-        base:      kw,
-        exact:     `"${kw}"`,
-        download:  `${kw} download`,
-        descargar: `${kw} descargar`,
-        gratis:    `${kw} gratis`,
-        tutorial:  `${kw} tutorial`,
-        y2024:     `${kw} 2024`,
-        y2025:     `${kw} 2025`,
-        how:       `how to ${kw}`,
-        como:      `como ${kw}`,
-    };
-}
-
-// ── WORKERS POR FILTRO ────────────────────────────────────────────────────
-function getWorkers(kw, filter) {
-    const q = expand(kw);
-
-    if (filter === 'youtube') return [
-        () => youtube(kw),
-        () => ddg(`site:youtube.com ${kw}`),
-        () => ddg(`site:youtube.com ${q.tutorial}`),
-        () => ddg(`site:youtube.com ${q.exact}`),
-        () => ddg(`site:youtube.com ${q.y2024}`),
-        () => bing(`site:youtube.com ${kw}`),
-        () => bing(`site:youtube.com ${q.tutorial}`),
-        () => bing(`youtube.com/watch "${kw}"`),
-        () => ddg(`youtube ${kw} playlist`),
-        () => bing(`site:youtube.com ${q.y2025}`),
-    ];
-
-    if (filter === 'github') return [
-        () => github(kw),
-        () => gitlab(kw),
-        () => npm(kw),
-        () => devto(kw),
-        () => ddg(`site:github.com ${kw}`),
-        () => ddg(`site:github.com ${q.exact}`),
-        () => bing(`site:github.com ${kw}`),
-        () => bing(`github ${kw} stars`),
-        () => hackernews(kw),
-        () => ddg(`site:gitlab.com ${kw}`),
-    ];
-
-    if (filter === 'reddit') return [
-        () => reddit(kw),
-        () => ddg(`site:reddit.com ${kw}`),
-        () => ddg(`site:reddit.com ${q.exact}`),
-        () => ddg(`site:old.reddit.com ${kw}`),
-        () => bing(`site:reddit.com ${kw}`),
-        () => bing(`reddit ${kw} discussion`),
-        () => ddg(`site:reddit.com ${q.y2024}`),
-        () => ddg(`reddit r/AskReddit ${kw}`),
-        () => quora(kw),
-        () => ddg(`site:reddit.com ${q.how}`),
-    ];
-
-    if (filter === 'stackoverflow') return [
-        () => stackoverflow(kw),
-        () => ddg(`site:stackoverflow.com ${kw}`),
-        () => ddg(`site:stackoverflow.com ${q.exact}`),
-        () => bing(`site:stackoverflow.com ${kw}`),
-        () => ddg(`site:stackexchange.com ${kw}`),
-        () => ddg(`stackoverflow ${kw} solution`),
-        () => bing(`stackoverflow how to ${kw}`),
-        () => hackernews(kw),
-        () => devto(kw),
-        () => ddg(`site:stackoverflow.com ${kw} error`),
-    ];
-
-    if (filter === 'mediafire') return [
-        () => mediafire(kw),
-        () => ddg(`site:mediafire.com/file ${kw}`),
-        () => ddg(`site:mediafire.com ${kw}`),
-        () => bing(`site:mediafire.com ${kw}`),
-        () => ddg(`"mediafire.com/file" "${kw}"`),
-        () => ddg(`mediafire ${q.descargar}`),
-        () => bing(`mediafire "${kw}" link`),
-        () => ddg(`mediafire ${q.gratis}`),
-        () => bing(`filetype:zip OR filetype:rar mediafire ${kw}`),
-        () => ddg(`"download" "mediafire" ${kw}`),
-    ];
-
-    if (filter === 'google') return [
-        () => ddg(`site:drive.google.com ${kw}`),
-        () => ddg(`site:docs.google.com ${kw}`),
-        () => bing(`site:drive.google.com ${kw}`),
-        () => bing(`site:docs.google.com ${kw}`),
-        () => ddg(`"drive.google.com/file" ${kw}`),
-        () => ddg(`"drive.google.com/drive/folders" ${kw}`),
-        () => ddg(`google drive "${kw}" compartido`),
-        () => bing(`"drive.google.com" "${kw}" public`),
-        () => ddg(`google docs "${kw}" plantilla`),
-        () => bing(`"docs.google.com" "${kw}" template`),
-    ];
-
-    if (filter === 'medium') return [
-        () => ddg(`site:medium.com ${kw}`),
-        () => bing(`site:medium.com ${kw}`),
-        () => ddg(`site:medium.com ${q.exact}`),
-        () => bing(`medium.com "${kw}" article`),
-        () => ddg(`site:towardsdatascience.com ${kw}`),
-        () => devto(kw),
-        () => ddg(`medium ${q.tutorial}`),
-        () => bing(`site:medium.com ${q.y2024}`),
-        () => arxiv(kw),
-        () => bing(`site:medium.com ${q.y2025}`),
-    ];
-
-    // filter === 'all' — 20 workers distintos
-    return [
-        () => ddg(kw, 1),
-        () => ddg(kw, 2),
-        () => ddg(q.exact),
-        () => ddg(q.download),
-        () => bing(kw, 0),
-        () => bing(kw, 10),
-        () => bing(kw, 20),
-        () => wikipedia(kw),
-        () => youtube(kw),
-        () => github(kw),
-        () => reddit(kw),
-        () => stackoverflow(kw),
-        () => hackernews(kw),
-        () => books(kw),
-        () => archive(kw),
-        () => devto(kw),
-        () => npm(kw),
-        () => arxiv(kw),
-        () => quora(kw),
-        () => vimeo(kw),
-    ];
-}
-
-// ── RELEVANCIA TF-IDF-LIKE ────────────────────────────────────────────────
-// En vez de cap duro en 100, usa escala logarítmica y penaliza irrelevantes
-function scoreResult(result, keyword) {
-    const terms  = keyword.toLowerCase().split(/\s+/).filter(t => t.length > 1);
-    const kw_lc  = keyword.toLowerCase();
-    const title  = result.title.toLowerCase();
-    const desc   = (result.description || '').toLowerCase();
-    const url    = result.url.toLowerCase();
-
-    let score = 0;
-
-    // Frecuencia en título (peso mayor)
-    terms.forEach(t => {
-        const titleFreq = (title.match(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'g')) || []).length;
-        score += titleFreq * 30;
-        if (title.startsWith(t)) score += 20;
-        if (title === kw_lc)     score += 50;
-    });
-
-    // Frase completa
-    if (title.includes(kw_lc)) score += 40;
-
-    // Frecuencia en descripción
-    terms.forEach(t => {
-        const dFreq = (desc.match(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'g')) || []).length;
-        score += Math.min(dFreq, 3) * 8;
-    });
-
-    // En URL
-    if (url.includes(kw_lc.replace(/ /g,'-')) || url.includes(kw_lc.replace(/ /g,'_'))) score += 15;
-    terms.forEach(t => { if (url.includes(t)) score += 5; });
-
-    // Bonus por fuente confiable
-    const src = (result.source || '').toLowerCase();
-    const srcBonuses = {
-        'wikipedia': 25, 'stack overflow': 22, 'super user': 18, 'ask ubuntu': 18,
-        'github': 18, 'gitlab': 14, 'arxiv': 20, 'hacker news': 15,
-        'npm': 15, 'dev.to': 12, 'google books': 12, 'open library': 12,
-        'youtube': 12, 'reddit': 10, 'medium': 12, 'quora': 8,
-        'archive.org': 8, 'mediafire': 10, 'vimeo': 8
-    };
-    Object.entries(srcBonuses).forEach(([s, b]) => { if (src.includes(s)) score += b; });
-
-    // Penalizar resultados sin descripción útil
-    if (!result.description || result.description.length < 20) score -= 10;
-
-    // Normalizar a 0-100 con logaritmo para mejor dispersión
-    return Math.max(0, Math.min(100, Math.round(Math.log1p(score) / Math.log1p(300) * 100)));
-}
-
-// ── FILTRADO ──────────────────────────────────────────────────────────────
-const SPAM = ['spam','scam','fake','virus','malware','phishing','free money','get rich','viagra','casino','porn','xxx'];
-
-function isValid(r) {
-    if (!r?.title || r.title.length < 3) return false;
-    if (!r?.url || !r.url.startsWith('http')) return false;
-    const txt = (r.title + ' ' + (r.description||'')).toLowerCase();
-    return !SPAM.some(s => txt.includes(s));
-}
-
-function dedupe(arr) {
-    const seen = new Set();
-    return arr.filter(r => {
+    async initBrain() {
         try {
-            const u = new URL(r.url);
-            const k = `${u.hostname.replace(/^www\./,'')  }${u.pathname}`.toLowerCase().replace(/\/$/,'').replace(/[?#].*/,'');
-            if (seen.has(k)) return false;
-            seen.add(k);
-            return true;
-        } catch { return false; }
+            // Verificar módulos de IA
+            const deepLearningPath = path.join(__dirname, 'neural', 'deep_learning.py');
+            const rankingPath = path.join(__dirname, 'neural', 'ranking_engine.py');
+            
+            await fs.access(deepLearningPath);
+            await fs.access(rankingPath);
+            
+            // Inicializar modelo si no existe
+            const modelPath = path.join(__dirname, 'models', 'nexus_brain.pkl');
+            try {
+                await fs.access(modelPath);
+            } catch {
+                console.log('🔨 Inicializando modelo de IA...');
+                await this.trainInitialModel();
+            }
+            
+            this.ready = true;
+            console.log('🧠 NEXUS AI Brain: ONLINE (50 neuronas activas)');
+        } catch (e) {
+            console.warn('⚠️  AI Brain no disponible:', e.message);
+        }
+    }
+
+    async trainInitialModel() {
+        return new Promise((resolve, reject) => {
+            const python = spawn('python3', [
+                path.join(__dirname, 'neural', 'deep_learning.py')
+            ]);
+
+            python.stdout.on('data', (data) => {
+                console.log(`🤖 ${data.toString().trim()}`);
+            });
+
+            python.on('close', (code) => {
+                if (code === 0) {
+                    console.log('✅ Modelo de IA inicializado');
+                    resolve();
+                } else {
+                    reject(new Error(`Proceso terminó con código ${code}`));
+                }
+            });
+        });
+    }
+
+    async rankResults(query, results, userId = null) {
+        if (!this.ready || !results.length) return results;
+
+        const startTime = Date.now();
+
+        return new Promise((resolve) => {
+            try {
+                const python = spawn('python3', ['-c', `
+import sys
+import json
+sys.path.insert(0, '${__dirname}/neural')
+from ranking_engine import RankingEngine
+from deep_learning import NexusAI
+
+# Cargar engines
+ranking = RankingEngine()
+try:
+    ranking.load('${__dirname}/data/ranking_state.json')
+except:
+    pass
+
+nexus_ai = NexusAI('${__dirname}/models/nexus_brain.pkl')
+
+# Parsear datos
+query = sys.stdin.readline().strip()
+results = json.loads(sys.stdin.readline())
+user_id = sys.stdin.readline().strip() or None
+
+# Ranking con IA
+ranked_by_engine = ranking.rank_results(query, results)
+final_results = nexus_ai.get_personalized_results(query, ranked_by_engine, user_id)
+
+# Guardar estado
+ranking.save('${__dirname}/data/ranking_state.json')
+
+print(json.dumps(final_results))
+                `]);
+
+                let output = '';
+                let errorOutput = '';
+
+                // Enviar datos al proceso Python
+                python.stdin.write(query + '\n');
+                python.stdin.write(JSON.stringify(results) + '\n');
+                python.stdin.write((userId || '') + '\n');
+                python.stdin.end();
+
+                python.stdout.on('data', (data) => {
+                    output += data.toString();
+                });
+
+                python.stderr.on('data', (data) => {
+                    errorOutput += data.toString();
+                });
+
+                python.on('close', (code) => {
+                    const responseTime = Date.now() - startTime;
+                    this.stats.avgResponseTime = 
+                        (this.stats.avgResponseTime * this.stats.queries + responseTime) / 
+                        (this.stats.queries + 1);
+                    this.stats.queries++;
+
+                    if (code === 0 && output.trim()) {
+                        try {
+                            const rankedResults = JSON.parse(output.trim());
+                            resolve(rankedResults);
+                        } catch (e) {
+                            console.error('Error parsing AI output:', e);
+                            resolve(results);
+                        }
+                    } else {
+                        if (errorOutput) console.error('AI Error:', errorOutput);
+                        resolve(results);
+                    }
+                });
+
+                // Timeout de 5 segundos
+                setTimeout(() => {
+                    python.kill();
+                    resolve(results);
+                }, 5000);
+
+            } catch (error) {
+                console.error('Error en ranking AI:', error);
+                resolve(results);
+            }
+        });
+    }
+
+    async learnFromClick(query, url, position, dwellTime = null, bounced = false) {
+        if (!this.ready) return;
+
+        try {
+            const python = spawn('python3', ['-c', `
+import sys
+import json
+sys.path.insert(0, '${__dirname}/neural')
+from ranking_engine import RankingEngine
+from deep_learning import NexusAI
+
+ranking = RankingEngine()
+try:
+    ranking.load('${__dirname}/data/ranking_state.json')
+except:
+    pass
+
+nexus_ai = NexusAI('${__dirname}/models/nexus_brain.pkl')
+
+data = json.loads(sys.stdin.readline())
+ranking.record_click(
+    data['query'], 
+    data['url'], 
+    data['position'],
+    data['dwellTime'],
+    data['bounced']
+)
+
+nexus_ai.learn_from_click(
+    data['query'],
+    {'url': data['url'], 'title': ''},
+    data['position']
+)
+
+ranking.save('${__dirname}/data/ranking_state.json')
+nexus_ai.save_model()
+
+print("OK")
+            `]);
+
+            python.stdin.write(JSON.stringify({
+                query, url, position, dwellTime, bounced
+            }) + '\n');
+            python.stdin.end();
+
+            python.on('close', () => {
+                this.stats.learned++;
+            });
+        } catch (error) {
+            console.error('Error en aprendizaje:', error);
+        }
+    }
+
+    getStats() {
+        return {
+            ...this.stats,
+            ready: this.ready,
+            uptime: process.uptime()
+        };
+    }
+}
+
+const nexusAI = new NexusAIBrain();
+
+// ══════════════════════════════════════════════════════════════════════════
+// 📡 MIDDLEWARE
+// ══════════════════════════════════════════════════════════════════════════
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Logging middleware
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        console.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
     });
-}
+    next();
+});
 
-// ── MOTOR PRINCIPAL ───────────────────────────────────────────────────────
-async function search(keyword, filter) {
-    const t0 = Date.now();
-    const workers = getWorkers(keyword, filter);
-    console.log(`\n▶ "${keyword}" [${filter}] — ${workers.length} workers`);
+// ══════════════════════════════════════════════════════════════════════════
+// 🔍 SEARCH FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════
 
-    const groups = await Promise.all(
-        workers.map((fn, i) =>
-            fn().then(r => { console.log(`  w${i+1} ✓ ${r.length}`); return r; })
-               .catch(e  => { console.error(`  w${i+1} ✗ ${e.message}`); return []; })
-        )
-    );
+const SOURCE_MAP = {
+    'youtube.com': 'YouTube', 'youtu.be': 'YouTube',
+    'github.com': 'GitHub', 'stackoverflow.com': 'Stack Overflow',
+    'reddit.com': 'Reddit', 'medium.com': 'Medium',
+    'wikipedia.org': 'Wikipedia', 'twitter.com': 'Twitter',
+    'linkedin.com': 'LinkedIn', 'dev.to': 'DEV.to'
+};
 
-    let results = groups.flat().filter(isValid);
-    results = dedupe(results);
-    results = results.map(r => ({ ...r, relevance: scoreResult(r, keyword) }));
-    results.sort((a, b) => b.relevance - a.relevance);
-
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
-    console.log(`✅ ${elapsed}s | ${results.length} resultados\n`);
-
-    return { results, stats: { totalResults: results.length, searchTime: elapsed, workersUsed: workers.length, timestamp: new Date().toISOString() } };
-}
-
-// ── RUTAS ─────────────────────────────────────────────────────────────────
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-app.get('/api/health', (_, res) => res.json({ status:'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), version:'4.0' }));
-
-const VALID_FILTERS = ['all','youtube','mediafire','google','github','reddit','stackoverflow','medium'];
-app.post('/api/search', async (req, res) => {
+function getSourceName(url) {
     try {
-        const { keyword, filter = 'all' } = req.body;
-        if (!keyword?.trim()) return res.status(400).json({ error:'Keyword requerido' });
-        if (!VALID_FILTERS.includes(filter)) return res.status(400).json({ error:'Filtro inválido' });
-        const data = await search(keyword.trim(), filter);
-        res.json({ success: true, ...data });
-    } catch (e) {
-        console.error('Error:', e);
-        res.status(500).json({ success:false, error:'Error interno', message: e.message });
+        const hostname = new URL(url).hostname.replace(/^www\./, '');
+        return SOURCE_MAP[hostname] || hostname;
+    } catch {
+        return 'Web';
+    }
+}
+
+async function searchGoogle(query) {
+    if (!process.env.GOOGLE_API_KEY || !process.env.GOOGLE_CX) {
+        return [];
+    }
+
+    try {
+        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: {
+                key: process.env.GOOGLE_API_KEY,
+                cx: process.env.GOOGLE_CX,
+                q: query,
+                num: 10
+            },
+            timeout: 5000
+        });
+
+        return (response.data.items || []).map(item => ({
+            title: item.title,
+            url: item.link,
+            description: item.snippet,
+            source: getSourceName(item.link),
+            score: 0.8,
+            provider: 'google'
+        }));
+    } catch (error) {
+        console.error('Error en Google Search:', error.message);
+        return [];
+    }
+}
+
+async function searchDuckDuckGo(query) {
+    try {
+        const response = await axios.get('https://api.duckduckgo.com/', {
+            params: {
+                q: query,
+                format: 'json',
+                no_html: 1
+            },
+            timeout: 5000
+        });
+
+        const results = [];
+        
+        // Abstract
+        if (response.data.Abstract) {
+            results.push({
+                title: response.data.Heading || query,
+                url: response.data.AbstractURL,
+                description: response.data.Abstract,
+                source: 'DuckDuckGo',
+                score: 0.9,
+                provider: 'duckduckgo'
+            });
+        }
+
+        // Related Topics
+        (response.data.RelatedTopics || []).forEach(topic => {
+            if (topic.FirstURL) {
+                results.push({
+                    title: topic.Text?.split(' - ')[0] || '',
+                    url: topic.FirstURL,
+                    description: topic.Text || '',
+                    source: getSourceName(topic.FirstURL),
+                    score: 0.7,
+                    provider: 'duckduckgo'
+                });
+            }
+        });
+
+        return results;
+    } catch (error) {
+        console.error('Error en DuckDuckGo:', error.message);
+        return [];
+    }
+}
+
+async function scrapeWebResults(query) {
+    // Búsqueda básica scraping HTML (Bing, etc.)
+    try {
+        const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+        const response = await axios.get(searchUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 5000
+        });
+
+        const $ = cheerio.load(response.data);
+        const results = [];
+
+        $('.b_algo').each((i, elem) => {
+            const titleElem = $(elem).find('h2 a');
+            const descElem = $(elem).find('.b_caption p');
+            
+            const title = titleElem.text();
+            const url = titleElem.attr('href');
+            const description = descElem.text();
+
+            if (title && url) {
+                results.push({
+                    title,
+                    url,
+                    description,
+                    source: getSourceName(url),
+                    score: 0.6,
+                    provider: 'bing'
+                });
+            }
+        });
+
+        return results.slice(0, 10);
+    } catch (error) {
+        console.error('Error en scraping:', error.message);
+        return [];
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🛣️ ROUTES
+// ══════════════════════════════════════════════════════════════════════════
+
+// Search endpoint
+app.get('/api/search', async (req, res) => {
+    try {
+        const { q: query, uid: userId } = req.query;
+
+        if (!query || query.trim().length === 0) {
+            return res.status(400).json({ error: 'Query requerido' });
+        }
+
+        console.log(`🔍 Buscando: "${query}"`);
+
+        // Verificar caché
+        let cachedResults = null;
+        if (redisClient) {
+            const cacheKey = `search:${query.toLowerCase()}`;
+            cachedResults = await redisClient.get(cacheKey);
+            
+            if (cachedResults) {
+                console.log('📦 Resultados desde caché');
+                return res.json(JSON.parse(cachedResults));
+            }
+        }
+
+        // Búsqueda en paralelo desde múltiples fuentes
+        const [googleResults, duckResults, scrapedResults] = await Promise.all([
+            searchGoogle(query),
+            searchDuckDuckGo(query),
+            scrapeWebResults(query)
+        ]);
+
+        // Combinar y deduplicar resultados
+        const allResults = [...googleResults, ...duckResults, ...scrapedResults];
+        const uniqueResults = Array.from(
+            new Map(allResults.map(r => [r.url, r])).values()
+        );
+
+        // Ranking con IA
+        const rankedResults = await nexusAI.rankResults(query, uniqueResults, userId);
+
+        const response = {
+            query,
+            total: rankedResults.length,
+            results: rankedResults.slice(0, 50),
+            timestamp: new Date().toISOString(),
+            ai_powered: nexusAI.ready
+        };
+
+        // Guardar en caché
+        if (redisClient) {
+            const cacheKey = `search:${query.toLowerCase()}`;
+            await redisClient.setEx(cacheKey, 3600, JSON.stringify(response)); // 1 hora
+        }
+
+        // Guardar búsqueda en DB
+        if (db) {
+            await db.collection('searches').insertOne({
+                query,
+                userId,
+                timestamp: new Date(),
+                resultsCount: rankedResults.length
+            });
+        }
+
+        res.json(response);
+
+    } catch (error) {
+        console.error('Error en búsqueda:', error);
+        res.status(500).json({ 
+            error: 'Error en búsqueda',
+            message: error.message 
+        });
     }
 });
 
-app.get('/api/filters', (_, res) => res.json({
-    filters: VALID_FILTERS,
-    description: { all:'Todos (20 workers)', youtube:'YouTube (10 workers)', github:'GitHub+GitLab+npm (10)', reddit:'Reddit+Quora (10)', stackoverflow:'StackOverflow×3 (10)', mediafire:'MediaFire (10)', google:'Google Drive/Docs (10)', medium:'Medium+DEV.to+arXiv (10)' }
-}));
+// Click tracking endpoint
+app.post('/api/click', async (req, res) => {
+    try {
+        const { query, url, position, dwellTime, bounced } = req.body;
 
-// ── AUTO-PING ─────────────────────────────────────────────────────────────
-let pingInterval = null;
-const startPing = () => {
-    if (!CONFIG.SELF_PING_URL) return;
-    const ping = async () => {
-        try { const r = await ax({ method:'GET', url:`${CONFIG.SELF_PING_URL.replace(/\/$/,'')}/api/health`, timeout:5000, headers:{'User-Agent':'SelfPingBot/1.0'} }); console.log(`✅ Ping OK uptime:${Math.floor(r.data.uptime)}s`); }
-        catch (e) { console.error('❌ Ping falló:', e.message); }
-    };
-    ping(); pingInterval = setInterval(ping, CONFIG.SELF_PING_INTERVAL);
-    console.log(`🔄 Auto-ping cada ${CONFIG.SELF_PING_INTERVAL/60000}min`);
-};
-const stopPing = () => { if (pingInterval) { clearInterval(pingInterval); pingInterval = null; } };
+        if (!query || !url || position === undefined) {
+            return res.status(400).json({ error: 'Datos incompletos' });
+        }
 
-app.post('/api/ping/start',  (_, res) => { if (!pingInterval) startPing(); res.json({ message: pingInterval?'ya activo':'iniciado' }); });
-app.post('/api/ping/stop',   (_, res) => { stopPing(); res.json({ message:'detenido' }); });
-app.get ('/api/ping/status', (_, res) => res.json({ active:!!pingInterval, intervalMinutes: CONFIG.SELF_PING_INTERVAL/60000 }));
+        // Aprender del click
+        await nexusAI.learnFromClick(query, url, position, dwellTime, bounced);
 
-app.use((req, res) => res.status(404).json({ error:'No encontrado', path: req.path }));
-app.use((err, req, res, _) => {
-    if (err.message?.startsWith('CORS:')) return res.status(403).json({ error: err.message });
-    res.status(500).json({ error:'Error interno', message: err.message });
+        // Guardar en DB
+        if (db) {
+            await db.collection('clicks').insertOne({
+                query,
+                url,
+                position,
+                dwellTime,
+                bounced,
+                timestamp: new Date()
+            });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error registrando click:', error);
+        res.status(500).json({ error: 'Error registrando click' });
+    }
 });
 
-// ── INICIO ────────────────────────────────────────────────────────────────
-const server = app.listen(PORT, () => {
-    console.log('\n╔══════════════════════════════════════════════════════════╗');
-    console.log('║  🚀 BUSCADOR v4.0  ·  20 workers  ·  15+ fuentes        ║');
-    console.log('╚══════════════════════════════════════════════════════════╝');
-    console.log(`📡 Puerto: ${PORT} | Self: ${CONFIG.SELF_PING_URL||'—'} | Front: ${CONFIG.VAR_URL||'—'}`);
-    console.log('🔍 DDG·Bing·Wikipedia·YouTube·GitHub·GitLab·Reddit·SO·HN·Books·Archive·npm·DEV.to·arXiv·Quora·Vimeo·MediaFire\n');
-    startPing();
+// Stats endpoint
+app.get('/api/stats', async (req, res) => {
+    try {
+        const aiStats = nexusAI.getStats();
+        
+        let dbStats = {};
+        if (db) {
+            const [searchCount, clickCount] = await Promise.all([
+                db.collection('searches').countDocuments(),
+                db.collection('clicks').countDocuments()
+            ]);
+            dbStats = { totalSearches: searchCount, totalClicks: clickCount };
+        }
+
+        res.json({
+            ai: aiStats,
+            database: dbStats,
+            server: {
+                uptime: process.uptime(),
+                memory: process.memoryUsage(),
+                platform: process.platform
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
-process.on('SIGTERM', () => { stopPing(); server.close(() => process.exit(0)); });
-process.on('SIGINT',  () => { stopPing(); server.close(() => process.exit(0)); });
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        ai: nexusAI.ready,
+        database: db !== null,
+        cache: redisClient !== null,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🚀 START SERVER
+// ══════════════════════════════════════════════════════════════════════════
+
+async function startServer() {
+    await connectDatabases();
+    
+    // Asegurar que existen las carpetas necesarias
+    await fs.mkdir(path.join(__dirname, 'models'), { recursive: true });
+    await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
+    await fs.mkdir(path.join(__dirname, 'logs'), { recursive: true });
+
+    app.listen(PORT, () => {
+        console.log(`
+╔═══════════════════════════════════════════════════════════════╗
+║                                                                 ║
+║   🚀  NEXUS SEARCH ENGINE - POWERED BY AI                      ║
+║                                                                 ║
+║   🌐  Servidor: http://localhost:${PORT}                        ║
+║   🧠  IA: ${nexusAI.ready ? 'ACTIVA (50 neuronas)' : 'DESACTIVADA'}              ║
+║   💾  MongoDB: ${db ? 'CONECTADO' : 'DESCONECTADO'}                           ║
+║   ⚡  Redis: ${redisClient ? 'CONECTADO' : 'DESCONECTADO'}                      ║
+║                                                                 ║
+║   📊  API Endpoints:                                            ║
+║      GET  /api/search?q=query                                  ║
+║      POST /api/click                                           ║
+║      GET  /api/stats                                           ║
+║      GET  /health                                              ║
+║                                                                 ║
+╚═══════════════════════════════════════════════════════════════╝
+        `);
+    });
+}
+
+// Manejo de errores no capturados
+process.on('uncaughtException', (error) => {
+    console.error('Error no capturado:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+    console.error('Promesa rechazada:', error);
+});
+
+// Inicio
+startServer();
+
 module.exports = app;
