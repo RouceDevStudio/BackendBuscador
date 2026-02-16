@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  nexus-search:
+    build: .
+    container_name: nexus-ai-search
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - AI_ENABLED=true
+      - NEURONS=50
+      - NODE_ENV=production
+    volumes:
+      # Persistir modelos y cache
+      - ./models:/app/models
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - nexus-network
+
+networks:
+  nexus-network:
+    driver: bridge
