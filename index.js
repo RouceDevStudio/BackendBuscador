@@ -629,6 +629,37 @@ async function start() {
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
         `);
+
+        // ══════════════════════════════════════════════════════════
+        //  SELF-PING — Mantiene el backend despierto en Render Free
+        //  Se llama a sí mismo cada 14 minutos via SELF_PING_URL
+        //  Configura en .env: SELF_PING_URL=https://tu-app.onrender.com
+        // ══════════════════════════════════════════════════════════
+        const SELF_PING_URL = process.env.SELF_PING_URL;
+        const PING_INTERVAL  = 14 * 60 * 1000; // 14 minutos en ms
+
+        if (SELF_PING_URL) {
+            console.log(`🏓 Self-ping activado → ${SELF_PING_URL}/health cada 14 min`);
+
+            const selfPing = async () => {
+                try {
+                    const pingUrl = `${SELF_PING_URL.replace(/\/$/, '')}/health`;
+                    const r = await axios.get(pingUrl, { timeout: 10000 });
+                    console.log(`🏓 Self-ping OK [${new Date().toISOString()}] status=${r.data?.status || r.status}`);
+                } catch (err) {
+                    console.warn(`⚠️  Self-ping falló [${new Date().toISOString()}]: ${err.message}`);
+                }
+            };
+
+            // Primer ping a los 30s de arrancar (el brain puede estar cargando aún)
+            setTimeout(selfPing, 30000);
+
+            // Luego cada 14 minutos indefinidamente
+            setInterval(selfPing, PING_INTERVAL);
+        } else {
+            console.log('ℹ️  Self-ping desactivado (SELF_PING_URL no definida en .env)');
+        }
+        // ══════════════════════════════════════════════════════════
     });
 }
 
