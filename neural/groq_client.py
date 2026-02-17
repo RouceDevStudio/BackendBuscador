@@ -51,8 +51,11 @@ class GroqClient:
                 f'{self.base_url}/chat/completions',
                 data=payload,
                 headers={
-                    'Authorization': f'Bearer {self.api_key}',
-                    'Content-Type':  'application/json'
+                    'Authorization':  f'Bearer {self.api_key}',
+                    'Content-Type':   'application/json',
+                    'User-Agent':     'groq-python/0.11.0',
+                    'X-Stainless-OS': 'Linux',
+                    'Accept':         'application/json',
                 }
             )
             with urllib.request.urlopen(req, timeout=10) as r:
@@ -91,8 +94,11 @@ class GroqClient:
                 f'{self.base_url}/chat/completions',
                 data=json.dumps(payload).encode('utf-8'),
                 headers={
-                    'Authorization': f'Bearer {self.api_key}',
-                    'Content-Type':  'application/json'
+                    'Authorization':  f'Bearer {self.api_key}',
+                    'Content-Type':   'application/json',
+                    'User-Agent':     'groq-python/0.11.0',
+                    'X-Stainless-OS': 'Linux',
+                    'Accept':         'application/json',
                 }
             )
             with urllib.request.urlopen(req, timeout=30) as r:
