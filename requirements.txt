@@ -1,43 +1,15 @@
-# NEXUS Search Engine - Python Dependencies
+# NEXUS - Dependencias Python completas
+# Instalar con: pip install -r requirements.txt --break-system-packages (Termux)
+# o: pip install -r requirements.txt (entorno normal / Render)
 
-# Core ML/AI
+# ─── Core Numérico ───────────────────────────
 numpy>=1.24.0
-# tensorflow>=2.13.0
-keras>=2.13.0
-scikit-learn>=1.3.0
 
-# Data Processing
-pandas>=2.0.0
-scipy>=1.11.0
+# ─── Base de datos ───────────────────────────
+pymongo>=4.6.0          # Cliente MongoDB Atlas
+dnspython>=2.4.0        # Necesario para resolver URIs mongodb+srv://
 
-# Natural Language Processing
-nltk>=3.8.0
-spacy>=3.6.0
-transformers>=4.30.0
-
-# Web Scraping
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
-requests>=2.31.0
-selenium>=4.10.0
-
-# Database
-pymongo>=4.4.0
-redis>=4.6.0
-psycopg2-binary>=2.9.0
-
-# Utilities
-python-dotenv>=1.0.0
-dateutil>=2.8.0
-pytz>=2023.3
-
-# Testing
-pytest>=7.4.0
-pytest-cov>=4.1.0
-
-# Performance
-numba>=0.57.0
-joblib>=1.3.0
-
-# Logging
-loguru>=0.7.0
+# ─── (Opcional) Groq SDK oficial ─────────────
+# El proyecto usa urllib directamente así que NO es obligatorio,
+# pero si en el futuro querés usar el SDK oficial descomentá esta línea:
+# groq>=0.4.0
