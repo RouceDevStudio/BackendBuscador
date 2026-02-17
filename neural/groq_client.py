@@ -32,20 +32,30 @@ class GroqClient:
         self.check()
     
     def check(self):
-        """Verifica si Groq está disponible. Se puede llamar en cualquier momento."""
+        """
+        Verifica si Groq está disponible haciendo un mini chat real.
+        NO usa /v1/models porque ese endpoint da 403 en cuentas gratuitas.
+        Usa /v1/chat/completions con max_tokens=1 para ser lo más ligero posible.
+        """
         if not self.api_key:
             print("⚠️  GROQ_API_KEY no encontrada — obtén una gratis en https://console.groq.com", flush=True)
             self.available = False
             return False
         try:
+            payload = json.dumps({
+                'model':      self.model,
+                'messages':   [{'role': 'user', 'content': 'hi'}],
+                'max_tokens': 1
+            }).encode('utf-8')
             req = urllib.request.Request(
-                f'{self.base_url}/models',
+                f'{self.base_url}/chat/completions',
+                data=payload,
                 headers={
                     'Authorization': f'Bearer {self.api_key}',
                     'Content-Type':  'application/json'
                 }
             )
-            with urllib.request.urlopen(req, timeout=5) as r:
+            with urllib.request.urlopen(req, timeout=10) as r:
                 if r.status == 200:
                     self.available   = True
                     self._fail_count = 0
@@ -55,6 +65,13 @@ class GroqClient:
                     print(f"⚠️  Groq error: HTTP {r.status}", flush=True)
                     self.available = False
                     return False
+        except urllib.error.HTTPError as e:
+            body = ''
+            try: body = e.read().decode('utf-8')[:120]
+            except: pass
+            print(f"⚠️  Groq no disponible: HTTP {e.code} — {body}", flush=True)
+            self.available = False
+            return False
         except Exception as e:
             print(f"⚠️  Groq no disponible: {e}", flush=True)
             self.available = False
