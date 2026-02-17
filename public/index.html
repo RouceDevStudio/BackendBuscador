@@ -818,6 +818,274 @@ body::after {
 
 .busy-notice.show { display: flex; }
 
+/* ── Ollama banner (debajo del header) ── */
+.ollama-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 16px;
+  background: rgba(92,184,145,0.06);
+  border-bottom: 1px solid rgba(92,184,145,0.15);
+  font-size: 12px;
+  color: var(--green);
+  font-family: 'IBM Plex Mono', monospace;
+  flex-shrink: 0;
+  animation: fadeUp 0.3s ease-out;
+}
+.ollama-banner.show { display: flex; }
+.ollama-banner-left { display: flex; align-items: center; gap: 8px; }
+.ollama-banner-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse-dot 2s infinite;
+  flex-shrink: 0;
+}
+.ollama-banner-btn {
+  background: none; border: none;
+  color: var(--green); cursor: pointer;
+  font-size: 11px; font-family: 'IBM Plex Mono', monospace;
+  text-decoration: underline; padding: 0;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* ── Ollama "no detectado" banner ── */
+.ollama-offline-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 16px;
+  background: rgba(212,168,83,0.05);
+  border-bottom: 1px solid rgba(212,168,83,0.1);
+  font-size: 12px;
+  color: var(--text3);
+  font-family: 'IBM Plex Mono', monospace;
+  flex-shrink: 0;
+}
+.ollama-offline-banner.show { display: flex; }
+.ollama-offline-btn {
+  background: none; border: 1px solid rgba(212,168,83,0.25);
+  color: var(--accent); cursor: pointer;
+  font-size: 11px; font-family: 'IBM Plex Mono', monospace;
+  padding: 4px 10px; border-radius: 6px;
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* ── Ollama setup modal ── */
+.ollama-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(6px);
+  z-index: 200;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ollama-modal-overlay.show { display: flex; }
+
+.ollama-modal {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%;
+  max-width: 720px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 0 0 32px;
+  animation: slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.ollama-modal::-webkit-scrollbar { width: 0; }
+
+.ollama-modal-handle {
+  width: 36px; height: 4px;
+  background: var(--border2);
+  border-radius: 2px;
+  margin: 12px auto 0;
+}
+
+.ollama-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 0;
+}
+
+.ollama-modal-title {
+  font-size: 16px; font-weight: 700;
+  color: var(--text);
+}
+
+.ollama-modal-close {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text2); cursor: pointer;
+  font-size: 14px;
+}
+
+.ollama-modal-body {
+  padding: 16px 18px 0;
+}
+
+.ollama-modal-body p {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.65;
+  margin-bottom: 16px;
+}
+
+/* tabs */
+.ollama-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.ollama-tab {
+  flex: 1;
+  padding: 9px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.ollama-tab.active {
+  background: var(--accent-bg);
+  border-color: rgba(212,168,83,0.3);
+  color: var(--accent2);
+}
+
+.ollama-tab-content { display: none; }
+.ollama-tab-content.active { display: block; }
+
+/* steps */
+.ollama-steps { display: flex; flex-direction: column; gap: 12px; }
+
+.ollama-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.ollama-step-num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  border: 1px solid rgba(212,168,83,0.25);
+  color: var(--accent2);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ollama-step-info h4 {
+  font-size: 13px; font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.ollama-step-info p {
+  font-size: 12px; color: var(--text2);
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.ollama-code {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--accent2);
+  margin-top: 6px;
+  white-space: pre;
+  overflow-x: auto;
+  position: relative;
+}
+
+.ollama-copy-btn {
+  position: absolute;
+  top: 6px; right: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text3);
+  font-size: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.ollama-note {
+  background: rgba(212,168,83,0.05);
+  border: 1px solid rgba(212,168,83,0.12);
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 16px;
+  line-height: 1.6;
+}
+
+/* card en el drawer */
+.ollama-local-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ollama-local-card:active { opacity: 0.8; }
+.ollama-local-card.live {
+  border-color: rgba(92,184,145,0.25);
+  background: rgba(92,184,145,0.04);
+}
+.ollama-local-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--text3);
+  flex-shrink: 0;
+}
+.ollama-local-card.live .ollama-local-dot {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-dot 2s infinite;
+}
+.ollama-local-info h4 {
+  font-size: 13px; font-weight: 600;
+  color: var(--text);
+}
+.ollama-local-info p {
+  font-size: 12px; color: var(--text3);
+  margin-top: 2px;
+}
+
 /* ── Responsive ── */
 @media (min-width: 720px) {
   .app {
@@ -866,6 +1134,21 @@ body::after {
       </button>
     </div>
   </header>
+
+  <!-- Ollama: detectado y activo -->
+  <div class="ollama-banner" id="ollama-banner">
+    <div class="ollama-banner-left">
+      <div class="ollama-banner-dot"></div>
+      <span>Ollama local activo — potencia extra disponible</span>
+    </div>
+    <button class="ollama-banner-btn" onclick="closeOllamaBanner()">✕</button>
+  </div>
+
+  <!-- Ollama: no detectado (solo cuando LLM también falla) -->
+  <div class="ollama-offline-banner" id="ollama-offline-banner">
+    <span>Sin LLM · ¿Querés más poder?</span>
+    <button class="ollama-offline-btn" onclick="showOllamaSetup()">Instalar Ollama</button>
+  </div>
 
   <!-- Messages -->
   <div class="messages" id="messages">
@@ -969,6 +1252,108 @@ body::after {
         <p id="llm-status">Verificando...</p>
       </div>
     </div>
+
+    <div class="section-label">Ollama Local</div>
+    <div class="ollama-local-card" id="ollama-local-card" onclick="showOllamaSetup()">
+      <div class="ollama-local-dot" id="ollama-local-dot"></div>
+      <div class="ollama-local-info">
+        <h4 id="ollama-local-name">Verificando...</h4>
+        <p id="ollama-local-status">Toca para ver instrucciones</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OLLAMA SETUP MODAL
+════════════════════════════════════════════════════════════ -->
+<div class="ollama-modal-overlay" id="ollama-modal-overlay" onclick="handleOllamaOverlayClick(event)">
+  <div class="ollama-modal" id="ollama-modal">
+    <div class="ollama-modal-handle"></div>
+    <div class="ollama-modal-head">
+      <div class="ollama-modal-title">⚡ Activar Ollama local</div>
+      <button class="ollama-modal-close" onclick="closeOllamaSetup()">✕</button>
+    </div>
+    <div class="ollama-modal-body">
+      <p>Con Ollama corriendo en tu dispositivo, NEXUS tiene un motor de lenguaje local de respaldo cuando Groq no está disponible. Son solo 3 comandos.</p>
+
+      <div class="ollama-tabs">
+        <button class="ollama-tab active" onclick="switchOllamaTab('android', this)">📱 Android (Termux)</button>
+        <button class="ollama-tab" onclick="switchOllamaTab('pc', this)">🖥️ PC / Mac</button>
+      </div>
+
+      <!-- Android tab -->
+      <div class="ollama-tab-content active" id="tab-android">
+        <div class="ollama-steps">
+          <div class="ollama-step">
+            <div class="ollama-step-num">1</div>
+            <div class="ollama-step-info">
+              <h4>Instalar Termux (si no lo tenés)</h4>
+              <p>Descargalo desde F-Droid o desde tu tienda de apps. Luego abrilo.</p>
+            </div>
+          </div>
+          <div class="ollama-step">
+            <div class="ollama-step-num">2</div>
+            <div class="ollama-step-info">
+              <h4>Instalar y arrancar Ollama</h4>
+              <p>Copiá y pegá estos comandos en Termux, uno por uno:</p>
+              <div class="ollama-code">pkg install ollama<button class="ollama-copy-btn" onclick="copyCode('pkg install ollama')">copiar</button></div>
+              <div class="ollama-code" style="margin-top:6px">OLLAMA_ORIGINS="*" ollama serve<button class="ollama-copy-btn" onclick="copyCode('OLLAMA_ORIGINS=&quot;*&quot; ollama serve')">copiar</button></div>
+            </div>
+          </div>
+          <div class="ollama-step">
+            <div class="ollama-step-num">3</div>
+            <div class="ollama-step-info">
+              <h4>Descargar el modelo (en otra ventana de Termux)</h4>
+              <p>Abrí una nueva sesión de Termux (deslizá desde el borde izquierdo) y ejecutá:</p>
+              <div class="ollama-code">ollama pull llama3.2:1b<button class="ollama-copy-btn" onclick="copyCode('ollama pull llama3.2:1b')">copiar</button></div>
+            </div>
+          </div>
+          <div class="ollama-step">
+            <div class="ollama-step-num">4</div>
+            <div class="ollama-step-info">
+              <h4>Volvé a esta página y recargala</h4>
+              <p>NEXUS va a detectar Ollama automáticamente y verás el indicador verde.</p>
+            </div>
+          </div>
+        </div>
+        <div class="ollama-note">
+          ⚠️ El <strong>OLLAMA_ORIGINS="*"</strong> en el paso 2 es clave: permite que la página web se comunique con Ollama. Sin esto no funciona.
+        </div>
+      </div>
+
+      <!-- PC tab -->
+      <div class="ollama-tab-content" id="tab-pc">
+        <div class="ollama-steps">
+          <div class="ollama-step">
+            <div class="ollama-step-num">1</div>
+            <div class="ollama-step-info">
+              <h4>Descargá e instalá Ollama</h4>
+              <p>Entrá a <strong>ollama.com</strong>, descargá el instalador y seguí los pasos (siguiente, siguiente, instalar).</p>
+            </div>
+          </div>
+          <div class="ollama-step">
+            <div class="ollama-step-num">2</div>
+            <div class="ollama-step-info">
+              <h4>Descargá el modelo</h4>
+              <div class="ollama-code">ollama pull llama3.2:1b<button class="ollama-copy-btn" onclick="copyCode('ollama pull llama3.2:1b')">copiar</button></div>
+              <p style="margin-top:8px">Iniciá Ollama con CORS habilitado:</p>
+              <div class="ollama-code">OLLAMA_ORIGINS="*" ollama serve<button class="ollama-copy-btn" onclick="copyCode('OLLAMA_ORIGINS=&quot;*&quot; ollama serve')">copiar</button></div>
+              <p style="margin-top:8px;font-size:11px;color:var(--text3)">Windows PowerShell: $env:OLLAMA_ORIGINS="*"; ollama serve</p>
+            </div>
+          </div>
+          <div class="ollama-step">
+            <div class="ollama-step-num">3</div>
+            <div class="ollama-step-info">
+              <h4>Recargá esta página</h4>
+              <p>NEXUS detecta Ollama automáticamente. El indicador verde confirma que está activo.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 
@@ -981,6 +1366,127 @@ let conversationId = null;
 let thinkingTimer = null;
 let thinkingSeconds = 0;
 let statsLoaded = false;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  OLLAMA LOCAL — detección y uso desde el frontend
+//  Cuando Groq falla, el browser llama directo a
+//  localhost:11434 (mismo dispositivo del usuario)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const OLLAMA_URL    = 'http://localhost:11434';
+const OLLAMA_MODEL  = 'llama3.2:1b';
+let   ollamaAvailable = false;
+let   ollamaBannerDismissed = false;
+
+async function detectOllama() {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const r = await fetch(OLLAMA_URL, { signal: ctrl.signal, mode: 'cors' });
+    clearTimeout(timer);
+    ollamaAvailable = r.ok || r.status === 200;
+  } catch (e) {
+    ollamaAvailable = false;
+  }
+  updateOllamaUI();
+  return ollamaAvailable;
+}
+
+function updateOllamaUI() {
+  // Drawer card
+  const card   = document.getElementById('ollama-local-card');
+  const dot    = document.getElementById('ollama-local-dot');
+  const name   = document.getElementById('ollama-local-name');
+  const status = document.getElementById('ollama-local-status');
+
+  if (ollamaAvailable) {
+    card.classList.add('live');
+    dot.style.background  = 'var(--green)';
+    dot.style.boxShadow   = '0 0 8px var(--green)';
+    name.textContent      = 'Ollama local activo';
+    status.textContent    = `Modelo: ${OLLAMA_MODEL}`;
+
+    // Banner verde (si no fue cerrado por el user)
+    if (!ollamaBannerDismissed) {
+      document.getElementById('ollama-banner').classList.add('show');
+    }
+    document.getElementById('ollama-offline-banner').classList.remove('show');
+  } else {
+    card.classList.remove('live');
+    dot.style.background  = 'var(--text3)';
+    dot.style.boxShadow   = 'none';
+    name.textContent      = 'Ollama no detectado';
+    status.textContent    = 'Toca para ver cómo instalarlo';
+    document.getElementById('ollama-banner').classList.remove('show');
+  }
+}
+
+function closeOllamaBanner() {
+  ollamaBannerDismissed = true;
+  document.getElementById('ollama-banner').classList.remove('show');
+}
+
+function showOfflineBanner() {
+  if (!ollamaAvailable && !ollamaBannerDismissed) {
+    document.getElementById('ollama-offline-banner').classList.add('show');
+  }
+}
+
+// Llama a Ollama DIRECTAMENTE desde el browser (sin pasar por Render)
+async function callOllamaLocal(message, history = []) {
+  if (!ollamaAvailable) return null;
+  try {
+    const messages = [
+      { role: 'system', content: 'Eres NEXUS, un asistente de inteligencia artificial creado por Jhonatan David Castro Galvis. Responde en español de forma concisa y útil.' },
+      ...history.slice(-6).map(h => ({ role: h.role, content: h.content })),
+      { role: 'user', content: message }
+    ];
+
+    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false }),
+    });
+
+    if (!r.ok) throw new Error(`Ollama HTTP ${r.status}`);
+    const data = await r.json();
+    return data?.message?.content || null;
+  } catch (e) {
+    console.warn('[Ollama local] falló:', e.message);
+    ollamaAvailable = false;
+    updateOllamaUI();
+    return null;
+  }
+}
+
+// Modal helpers
+function showOllamaSetup() {
+  document.getElementById('ollama-modal-overlay').classList.add('show');
+}
+
+function closeOllamaSetup() {
+  document.getElementById('ollama-modal-overlay').classList.remove('show');
+}
+
+function handleOllamaOverlayClick(e) {
+  if (e.target === document.getElementById('ollama-modal-overlay')) {
+    closeOllamaSetup();
+  }
+}
+
+function switchOllamaTab(tab, btn) {
+  document.querySelectorAll('.ollama-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ollama-tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function copyCode(text) {
+  const decoded = text.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  navigator.clipboard?.writeText(decoded).catch(() => {});
+}
+
+// Re-detectar cada 30s mientras la página está abierta
+setInterval(detectOllama, 30000);
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  SMART POLLING — nunca toca el backend mientras busy
@@ -1179,7 +1685,24 @@ async function sendMessage(text) {
     hideThinking();
 
     conversationId = data.conversationId;
-    addMessage(data.message || data.response, 'ai', data);
+
+    // ── Ollama local fallback ─────────────────────────────────
+    // Si el backend respondió en Smart Mode (sin LLM), intentamos
+    // mejorar la respuesta usando Ollama local del usuario
+    let finalMessage = data.message || data.response;
+    if (!data.llmUsed && ollamaAvailable) {
+      try {
+        document.getElementById('hint').textContent = '🦙 Usando Ollama local…';
+        const ollamaResp = await callOllamaLocal(message);
+        if (ollamaResp && ollamaResp.trim().length > 10) {
+          finalMessage = ollamaResp;
+          data._ollamaUsed = true;
+        }
+      } catch (e) { /* silencioso */ }
+    }
+    // ────────────────────────────────────────────────────────────
+
+    addMessage(finalMessage, 'ai', data);
 
     // Actualizar stats con los datos que ya vienen en la respuesta (sin hacer fetch extra)
     if (data.neuralActivity || data.neural_activity) {
@@ -1271,6 +1794,7 @@ function updateLLM(available, model) {
     card.classList.remove('live');
     name.textContent   = 'LLM desconectado';
     status.textContent = 'Configura Groq u Ollama';
+    showOfflineBanner();
   }
 }
 
@@ -1338,6 +1862,7 @@ document.getElementById('new-btn').addEventListener('click', () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 loadStats();       // carga inicial (no hay busy al cargar)
 startPolling();    // polling lento que se pausa automáticamente si busy
+detectOllama();    // detectar Ollama local al arrancar
 inputEl.focus();
 </script>
 
