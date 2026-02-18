@@ -574,7 +574,86 @@ class ResponseGenerator:
                 "- Memoria episódica, semántica y de trabajo\n"
                 "- Aprendo de cada conversación\n"
                 "- Búsqueda web integrada\n\n"
-                "Responde SIEMPRE en español, de forma clara y natural."
+                "════════════════════════════════════════════════\n"
+                "BASE DE CONOCIMIENTO — UPGAMES (usa esto para responder preguntas de usuarios)\n"
+                "════════════════════════════════════════════════\n\n"
+                "## ¿Qué es UpGames?\n"
+                "UpGames es una biblioteca digital / motor de indexación de metadatos de contenido (juegos, apps, mods, software). "
+                "NO almacena archivos, solo indexa URLs y metadatos de terceros, similar a Google Search pero especializado. "
+                "El acceso es 100% gratis para los usuarios. Los ingresos son por publicidad. "
+                "Opera bajo la ley colombiana (Ley 1915 de 2018, Ley 1273 de 2009) y el modelo Safe Harbor (DMCA 512c, Directiva 2000/31/CE). "
+                "Email de soporte/reportes de abuso: mr.m0onster@protonmail.com\n\n"
+                "## Registro e inicio de sesión\n"
+                "- Registro: nombre de usuario (3-20 caracteres, sin espacios), email válido, contraseña (mínimo 6 caracteres).\n"
+                "- Login: se puede usar nombre de usuario O email + contraseña.\n"
+                "- La primera vez aparece un tutorial de bienvenida con las normas de la plataforma; hay que leerlo hasta el final para aceptar.\n\n"
+                "## Biblioteca (página principal)\n"
+                "- Tarjetas de contenido con: vista previa de imagen/video, estado del enlace (🟢 Online / 🟡 Revisión / 🔴 Caído), "
+                "autor (@usuario) con insignia de verificación, categoría, contador de descargas efectivas, botones sociales.\n"
+                "- Botón principal de cada tarjeta: 'ACCEDER A LA NUBE' → lleva a la página puente.\n"
+                "- Búsqueda en tiempo real: filtra por título, descripción, usuario, categoría y etiquetas.\n"
+                "- Scroll infinito: carga 12 items por tanda de forma circular.\n"
+                "- Botón ❤️: agrega el contenido a Favoritos (guardado en la Bóveda del perfil).\n"
+                "- Botón 📤: comparte el enlace del contenido (usa Web Share API o copia al portapapeles).\n"
+                "- Botón 🚩 en tarjeta: reporta un enlace roto, obsoleto o con malware.\n"
+                "- Botón ⓘ (esquina): reporte de abuso de plataforma (abre email a mr.m0onster@protonmail.com).\n"
+                "- NEXUS IA: botón flotante verde (hexágono) que abre este panel de asistencia.\n\n"
+                "## Página Puente (antes de descargar)\n"
+                "- Cuenta regresiva obligatoria de 30 segundos (no se puede saltar).\n"
+                "- Sirve para seguridad, validación y mostrar publicidad (fuente de ingresos de la plataforma y creadores).\n"
+                "- Al terminar el countdown aparece el botón verde '🚀 Obtener Enlace' que abre el enlace en nueva pestaña.\n"
+                "- Mensajes de estado: ✅ Verde = descarga validada | ⚠️ Amarillo = ya descargaste 2 veces hoy (sigue funcionando) | ❌ Rojo = error, recarga la página.\n"
+                "- Si el navegador bloquea el popup, el usuario debe permitir popups para este sitio.\n\n"
+                "## Perfil de usuario (4 pestañas)\n\n"
+                "### ☁️ Publicar\n"
+                "Para subir contenido el usuario llena: título, descripción (opcional), enlace de descarga, URL de imagen, categoría.\n"
+                "- Títulos prohibidos (palabras bloqueadas): crack, cracked, crackeado, pirata, pirateado, gratis, free, full, completo, premium, pro, descargar, download.\n"
+                "- Servicios de alojamiento aceptados: MediaFire, MEGA, Google Drive, OneDrive, Dropbox, GitHub, GoFile, PixelDrain, Krakenfiles.\n"
+                "- Formatos de imagen aceptados: .jpg, .png, .webp, .gif\n"
+                "- Estado inicial de publicación: 'Pendiente' hasta aprobación del administrador.\n"
+                "- Cooldown entre publicaciones: 30 segundos (anti-spam).\n\n"
+                "### Categorías de contenido\n"
+                "- Juego: Solo si eres el desarrollador o tienes autorización legal escrita.\n"
+                "- Mod: Modificaciones de juegos (texturas, gameplay, personajes).\n"
+                "- Optimización: Mejoras de rendimiento, parches de FPS, configuraciones.\n"
+                "- Ajustes (Herramientas): Utilidades y ajustes del sistema.\n"
+                "- Apps: Aplicaciones móviles o de escritorio.\n"
+                "- Software Open Source: Proyectos GPL y herramientas libres.\n\n"
+                "### 🕒 Historial\n"
+                "Muestra todas las publicaciones del usuario con su estado (Pendiente / Aprobado). Permite editar o eliminar publicaciones.\n\n"
+                "### 🔒 Bóveda\n"
+                "Contenido guardado en Favoritos (❤️ desde la biblioteca). Acceso rápido a todo lo que el usuario marcó.\n\n"
+                "### 🚩 Mis Reportes\n"
+                "Muestra los reportes recibidos en las publicaciones propias (enlace caído, obsoleto, malware). "
+                "Afecta la reputación y los ingresos del creador. Se recomienda mantener el contenido actualizado.\n\n"
+                "## Sistema de verificación (insignias de colores)\n"
+                "- Nivel 0: Sin verificación.\n"
+                "- Nivel 1 (Bronce): color #CECECE — habilita monetización.\n"
+                "- Nivel 2 (Oro): color #FFD700 — prioridad en el feed principal.\n"
+                "- Nivel 3 (Elite): color #00EFFF — máxima credibilidad y visibilidad.\n\n"
+                "## Sistema de economía / ganancias\n"
+                "Los creadores ganan dinero por las descargas de su contenido.\n"
+                "- Tasa: $1.00 USD por cada 1,000 descargas verificadas y orgánicas.\n"
+                "- Requisitos para cobrar: saldo mínimo de $10.00 USD, nivel de verificación 1+, "
+                "al menos 1 publicación con 2,000+ descargas, tener email PayPal configurado.\n"
+                "- Único método de pago: PayPal.\n"
+                "- Procesamiento de pagos: todos los domingos a las 23:59 GMT-5 (Colombia).\n"
+                "- El PayPal se configura en la pestaña Publicar, sección de economía.\n\n"
+                "## Sistema de reportes de contenido\n"
+                "Al hacer clic en 🚩 en una tarjeta aparecen 3 opciones: "
+                "'Enlace caído' (no funciona), 'Contenido obsoleto' (versión desactualizada), 'Malware o engañoso' (sospechoso).\n"
+                "- Con 3 o más reportes el estado cambia a 'revisión'.\n"
+                "- El administrador revisa en 24-72 horas.\n"
+                "- Un usuario no puede reportar el mismo contenido dos veces.\n\n"
+                "## Filtros automáticos de seguridad\n"
+                "La plataforma filtra automáticamente dominios maliciosos, palabras clave prohibidas y URLs inválidas. "
+                "Pasar los filtros NO certifica que el contenido sea legal; la responsabilidad es del usuario que indexó.\n\n"
+                "## Términos y condiciones (versión v.2026.C, Protocolo Legal v3.1)\n"
+                "UpGames no almacena ni distribuye archivos. Toda la responsabilidad del contenido indexado recae en el usuario que lo publicó. "
+                "Al registrarse y publicar, el usuario acepta las condiciones de la plataforma.\n\n"
+                "════════════════════════════════════════════════\n\n"
+                "Responde SIEMPRE en español, de forma clara y natural. "
+                "Cuando un usuario pregunte sobre funciones de UpGames, usa la base de conocimiento anterior para responder directamente sin necesitar buscar en internet."
                 + memory_context
             )
 
@@ -898,7 +977,21 @@ class NexusBrain:
             # Estado interno
             'tu memoria', 'tu estado', 'tus estadísticas', 'estado neural',
             'red neuronal', 'parámetros', 'entrenamiento', 'vocabulario',
-            'loss', 'métrica', 'episodio', 'patrón'
+            'loss', 'métrica', 'episodio', 'patrón',
+            # UpGames — preguntas sobre la plataforma (responde con conocimiento interno)
+            'upgames', 'up games', 'puente', 'página puente', 'bóveda', 'boveda',
+            'biblioteca', 'acceder a la nube', 'obtener enlace', 'countdown',
+            'cuenta regresiva', 'perfil', 'publicar', 'publicación', 'publicacion',
+            'historial', 'mis reportes', 'bóveda', 'favoritos',
+            'verificación', 'verificacion', 'nivel bronce', 'nivel oro', 'nivel elite',
+            'insignia', 'badge', 'economía', 'economia', 'ganancias', 'cobrar', 'pago',
+            'paypal', 'saldo', 'descargas verificadas', 'monetización', 'monetizacion',
+            'enlace caído', 'enlace caido', 'reportar enlace', 'reporte',
+            'categorías', 'categorias', 'mod', 'optimización', 'software open source',
+            'términos', 'terminos', 'condiciones', 'safe harbor', 'registro', 'registrarse',
+            'iniciar sesión', 'inicio de sesión', 'login', 'contraseña', 'nexus ia',
+            'scroll infinito', 'tarjeta', 'card', 'mediafire', 'mega', 'google drive',
+            'onedrive', 'dropbox', 'github', 'gofile', 'pixeldrain', 'krakenfiles'
         ]
         
         is_no_search = any(kw in msg_lower for kw in no_search_patterns)
@@ -952,7 +1045,16 @@ class NexusBrain:
         is_internal = any(kw in msg_lower for kw in [
             'loss', 'métrica', 'estadística', 'estado neural', 'memoria',
             'vocabulario', 'entrenamiento', 'qué eres', 'cómo funcionas',
-            'explicate', 'tu memoria', 'tu estado', 'patrón', 'red neuronal'
+            'explicate', 'tu memoria', 'tu estado', 'patrón', 'red neuronal',
+            # UpGames
+            'upgames', 'up games', 'puente', 'bóveda', 'boveda', 'biblioteca',
+            'acceder a la nube', 'obtener enlace', 'cuenta regresiva', 'perfil',
+            'publicar', 'publicación', 'historial', 'mis reportes', 'favoritos',
+            'verificación', 'economía', 'ganancias', 'cobrar', 'paypal', 'saldo',
+            'monetización', 'reportar enlace', 'categorías', 'términos', 'condiciones',
+            'registro', 'registrarse', 'inicio de sesión', 'nexus ia', 'mediafire',
+            'mega', 'google drive', 'onedrive', 'dropbox', 'github', 'gofile',
+            'pixeldrain', 'krakenfiles', 'enlace caído', 'enlace caido'
         ])
         
         return {
