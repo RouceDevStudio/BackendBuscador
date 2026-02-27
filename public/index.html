@@ -1411,6 +1411,182 @@ body::after {
   .suggestions { grid-template-columns: 1fr; }
   .msg-body { max-width: 87%; }
 }
+
+/* ═══════════════════════════════════════════
+   HISTORY SIDEBAR
+═══════════════════════════════════════════ */
+.hist-overlay {
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.55);
+  backdrop-filter:blur(3px);
+  z-index:200;
+  opacity:0; visibility:hidden;
+  transition:opacity .25s,visibility .25s;
+}
+.hist-overlay.show { opacity:1; visibility:visible; }
+
+.hist-sidebar {
+  position:fixed; top:0; left:0; bottom:0;
+  width:min(300px,86vw);
+  background:#0F0F13;
+  border-right:1px solid var(--border2);
+  z-index:201;
+  display:flex; flex-direction:column;
+  transform:translateX(-100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow:6px 0 32px rgba(0,0,0,.7);
+}
+.hist-sidebar.open { transform:translateX(0); }
+
+.hist-head {
+  display:flex; align-items:center;
+  justify-content:space-between;
+  padding:18px 14px 12px;
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.hist-title {
+  display:flex; align-items:center;
+  gap:8px; font-size:15px;
+  font-weight:700; color:var(--text);
+}
+.hist-del-all {
+  width:28px; height:28px;
+  display:flex; align-items:center; justify-content:center;
+  background:transparent;
+  border:1px solid var(--border);
+  border-radius:7px; color:var(--text3);
+  cursor:pointer; transition:all .15s;
+}
+.hist-del-all:hover {
+  background:rgba(229,97,90,.1);
+  border-color:rgba(229,97,90,.3);
+  color:var(--red);
+}
+
+.hist-search-wrap {
+  position:relative; padding:10px 12px 6px;
+  flex-shrink:0;
+}
+.hist-search {
+  width:100%; background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:8px 12px 8px 32px;
+  color:var(--text); font-family:inherit;
+  font-size:13px; outline:none;
+  transition:border-color .2s;
+}
+.hist-search::placeholder { color:var(--text3); }
+.hist-search:focus { border-color:rgba(212,168,83,.3); }
+
+.hist-list {
+  flex:1; overflow-y:auto;
+  overflow-x:hidden;
+  padding:4px 8px 20px;
+}
+.hist-list::-webkit-scrollbar { width:3px; }
+.hist-list::-webkit-scrollbar-thumb {
+  background:rgba(255,255,255,.07);
+  border-radius:10px;
+}
+
+.hist-group {
+  font-size:10px; font-family:'IBM Plex Mono',monospace;
+  color:var(--text3); letter-spacing:.1em;
+  text-transform:uppercase;
+  padding:10px 6px 3px;
+}
+
+.hist-item {
+  display:flex; align-items:center;
+  gap:8px; padding:9px 8px;
+  border-radius:9px; cursor:pointer;
+  transition:background .15s;
+  margin-bottom:1px;
+  border:1px solid transparent;
+}
+.hist-item:hover { background:var(--bg3); }
+.hist-item.active {
+  background:var(--accent-bg);
+  border-color:rgba(212,168,83,.2);
+}
+.hist-item-body { flex:1; min-width:0; }
+.hist-item-title {
+  font-size:13px; font-weight:500;
+  color:var(--text); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.hist-item-meta {
+  font-size:11px; color:var(--text3);
+  margin-top:2px; font-family:'IBM Plex Mono',monospace;
+}
+.hist-item-del {
+  width:22px; height:22px;
+  display:flex; align-items:center; justify-content:center;
+  background:transparent; border:none;
+  border-radius:5px; color:var(--text3);
+  cursor:pointer; flex-shrink:0;
+  opacity:0; transition:all .12s;
+}
+.hist-item:hover .hist-item-del { opacity:1; }
+.hist-item-del:hover {
+  background:rgba(229,97,90,.15); color:var(--red);
+}
+
+.hist-empty {
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:10px; padding:52px 20px;
+  color:var(--text3); font-size:13px;
+  text-align:center;
+}
+
+/* ═════════════ Confirm modal ════════════ */
+.conf-overlay {
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.65);
+  backdrop-filter:blur(5px);
+  z-index:500;
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; visibility:hidden;
+  transition:opacity .2s,visibility .2s;
+}
+.conf-overlay.show { opacity:1; visibility:visible; }
+.conf-box {
+  background:#18181E;
+  border:1px solid var(--border2);
+  border-radius:16px;
+  padding:26px 22px;
+  width:min(300px,88vw);
+  text-align:center;
+  animation:scaleIn .18s ease;
+}
+@keyframes scaleIn {
+  from{transform:scale(.92);opacity:0}
+  to{transform:scale(1);opacity:1}
+}
+.conf-box h3 { font-size:15px; font-weight:700; color:var(--text); margin-bottom:7px; }
+.conf-box p  { font-size:13px; color:var(--text2); }
+.conf-cancel {
+  flex:1; padding:10px;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:9px; color:var(--text2);
+  font-family:inherit; font-size:13px;
+  cursor:pointer; transition:all .15s;
+}
+.conf-cancel:hover { background:var(--border2); }
+.conf-ok {
+  flex:1; padding:10px;
+  background:rgba(229,97,90,.14);
+  border:1px solid rgba(229,97,90,.3);
+  border-radius:9px; color:var(--red);
+  font-family:inherit; font-size:13px;
+  font-weight:600; cursor:pointer;
+  transition:all .15s;
+}
+.conf-ok:hover { background:rgba(229,97,90,.25); }
 </style>
 </head>
 <body>
@@ -1478,6 +1654,9 @@ body::after {
         <div class="status-dot" id="status-dot"></div>
         <span id="status-text">...</span>
       </div>
+      <button class="btn-icon" id="history-btn" title="Historial de chats">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      </button>
       <button class="btn-icon" id="stats-btn" title="Estadísticas">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h2v18H3V3zm4 7h2v11H7V10zm4-4h2v15h-2V6zm4 8h2v7h-2v-7zm4-6h2v13h-2V8z"/></svg>
       </button>
@@ -1709,6 +1888,45 @@ body::after {
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════
+     HISTORY SIDEBAR
+════════════════════════════════════════════════════════════ -->
+<div class="hist-overlay" id="hist-overlay" onclick="closeHistory()"></div>
+<div class="hist-sidebar" id="hist-sidebar">
+  <div class="hist-head">
+    <div class="hist-title">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="var(--accent)"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      Historial
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="hist-del-all" onclick="confirmClearAll()" title="Borrar todo">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      </button>
+      <button class="btn-icon" onclick="closeHistory()" style="width:28px;height:28px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="hist-search-wrap">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="position:absolute;left:26px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+    <input class="hist-search" id="hist-search" placeholder="Buscar en el historial…" oninput="renderHistory(this.value)">
+  </div>
+  <div class="hist-list" id="hist-list"></div>
+</div>
+
+<!-- Confirm dialog -->
+<div class="conf-overlay" id="conf-overlay">
+  <div class="conf-box">
+    <div style="font-size:28px;margin-bottom:10px" id="conf-icon">🗑️</div>
+    <h3 id="conf-title">¿Borrar historial?</h3>
+    <p id="conf-desc">Esta acción no se puede deshacer.</p>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="conf-cancel" onclick="closeConfirm()">Cancelar</button>
+      <button class="conf-ok" id="conf-ok">Borrar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  ESTADO GLOBAL
@@ -1756,6 +1974,242 @@ let conversationId = null;
 let thinkingTimer = null;
 let thinkingSeconds = 0;
 let statsLoaded = false;
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  HISTORIAL DE CHATS — localStorage
+//  Guarda texto plano para retomar con contexto real
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const H_INDEX = 'nxh_index';   // lista de chats [{id,title,ts,count}]
+const H_MSG   = 'nxh_m_';      // mensajes de cada chat: [{role,text,ts}]
+
+let hActiveId    = null;  // id del chat activo
+let hMsgs        = [];    // mensajes del chat activo en memoria [{role,text}]
+let hConfirmFn   = null;  // acción pendiente en confirm
+
+// ── helpers ─────────────────────────────────────
+function hUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function hGetIndex() {
+  try { return JSON.parse(localStorage.getItem(H_INDEX)||'[]'); } catch { return []; }
+}
+function hSetIndex(list) { localStorage.setItem(H_INDEX, JSON.stringify(list)); }
+
+function hGetMsgs(id) {
+  try { return JSON.parse(localStorage.getItem(H_MSG+id)||'[]'); } catch { return []; }
+}
+function hSetMsgs(id, msgs) { localStorage.setItem(H_MSG+id, JSON.stringify(msgs)); }
+function hDelMsgs(id) { localStorage.removeItem(H_MSG+id); }
+
+function hTitle(text) {
+  const t = text.trim().replace(/\s+/g,' ');
+  return t.length > 44 ? t.slice(0,44)+'…' : t || 'Nuevo chat';
+}
+
+function hRelTime(ts) {
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s < 60)  return 'ahora';
+  const m = Math.floor(s/60);
+  if (m < 60)  return `hace ${m} min`;
+  const h = Math.floor(m/60);
+  if (h < 24)  return `hace ${h}h`;
+  const d = Math.floor(h/24);
+  if (d === 1) return 'ayer';
+  if (d < 7)   return `hace ${d} días`;
+  return new Date(ts).toLocaleDateString('es',{day:'numeric',month:'short'});
+}
+
+function hEsc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Guardar mensaje en historial ─────────────────
+// Llamar después de addMessage para guardar texto plano
+function hPush(role, text) {
+  if (!hActiveId) {
+    // Primer mensaje → crear chat nuevo
+    hActiveId = hUid();
+    hMsgs = [];
+    const idx = hGetIndex();
+    idx.unshift({ id: hActiveId, title: hTitle(role==='user'?text:'Chat'), ts: Date.now(), count: 0 });
+    hSetIndex(idx);
+  }
+  hMsgs.push({ role, text, ts: Date.now() });
+  // Actualizar index
+  const idx = hGetIndex();
+  const i = idx.findIndex(c=>c.id===hActiveId);
+  if (i!==-1) {
+    idx[i].count = hMsgs.length;
+    idx[i].ts = Date.now();
+    if (role==='user' && hMsgs.filter(m=>m.role==='user').length===1) {
+      idx[i].title = hTitle(text); // título = primer msg usuario
+    }
+    // Mover al tope
+    const [e] = idx.splice(i,1);
+    idx.unshift(e);
+    hSetIndex(idx);
+  }
+  hSetMsgs(hActiveId, hMsgs);
+  renderHistory();
+}
+
+// Historial en formato que el servidor entiende (últimos 10 turnos)
+function hGetServerHistory() {
+  return hMsgs.slice(-10).map(m=>({ role: m.role==='user'?'user':'assistant', content: m.text }));
+}
+
+// ── Sidebar open/close ───────────────────────────
+function openHistory() {
+  document.getElementById('hist-sidebar').classList.add('open');
+  document.getElementById('hist-overlay').classList.add('show');
+  document.getElementById('history-btn').classList.add('active');
+  document.getElementById('hist-search').value = '';
+  renderHistory();
+}
+function closeHistory() {
+  document.getElementById('hist-sidebar').classList.remove('open');
+  document.getElementById('hist-overlay').classList.remove('show');
+  document.getElementById('history-btn').classList.remove('active');
+}
+
+document.getElementById('history-btn').addEventListener('click', () => {
+  document.getElementById('hist-sidebar').classList.contains('open') ? closeHistory() : openHistory();
+});
+
+// ── Renderizar lista ─────────────────────────────
+function renderHistory(query='') {
+  const list = hGetIndex();
+  const q    = query.toLowerCase();
+  const filtered = q ? list.filter(c=>c.title.toLowerCase().includes(q)) : list;
+  const el = document.getElementById('hist-list');
+  el.innerHTML = '';
+
+  if (filtered.length===0) {
+    el.innerHTML = `<div class="hist-empty">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="rgba(255,255,255,0.1)"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      <span>${q ? 'Sin resultados' : 'Aún no hay chats'}</span>
+    </div>`;
+    return;
+  }
+
+  // Agrupar por día
+  const now   = Date.now();
+  const tod   = new Date(); tod.setHours(0,0,0,0);
+  const wk    = new Date(tod); wk.setDate(tod.getDate()-6);
+  const mo    = new Date(tod); mo.setDate(tod.getDate()-30);
+  const groups = [
+    { label:'Hoy',         items:[] },
+    { label:'Esta semana', items:[] },
+    { label:'Este mes',    items:[] },
+    { label:'Anterior',    items:[] },
+  ];
+  filtered.forEach(c=>{
+    const d = new Date(c.ts); d.setHours(0,0,0,0);
+    if (d>=tod)     groups[0].items.push(c);
+    else if (d>=wk) groups[1].items.push(c);
+    else if (d>=mo) groups[2].items.push(c);
+    else            groups[3].items.push(c);
+  });
+
+  groups.forEach(({label,items})=>{
+    if (!items.length) return;
+    const gl = document.createElement('div');
+    gl.className = 'hist-group';
+    gl.textContent = label;
+    el.appendChild(gl);
+    items.forEach(c=>{
+      const item = document.createElement('div');
+      item.className = 'hist-item' + (c.id===hActiveId?' active':'');
+      item.innerHTML = `
+        <div class="hist-item-body">
+          <div class="hist-item-title">${hEsc(c.title)}</div>
+          <div class="hist-item-meta">${hRelTime(c.ts)} · ${c.count||0} mensajes</div>
+        </div>
+        <button class="hist-item-del" title="Eliminar">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>`;
+      item.querySelector('.hist-item-del').addEventListener('click', e=>{
+        e.stopPropagation();
+        confirmDeleteChat(c.id, c.title);
+      });
+      item.addEventListener('click', ()=> loadChat(c.id));
+      el.appendChild(item);
+    });
+  });
+}
+
+// ── Cargar chat ──────────────────────────────────
+function loadChat(id) {
+  const msgs = hGetMsgs(id);
+  const idx  = hGetIndex();
+  const meta = idx.find(c=>c.id===id);
+  if (!meta || !msgs.length) return;
+
+  // Restaurar estado
+  hActiveId = id;
+  hMsgs     = msgs;
+  conversationId = null; // el server generará un convId nuevo, pero recibirá el historial
+
+  // Limpiar pantalla
+  const msgsEl = document.getElementById('messages');
+  msgsEl.innerHTML = '';
+
+  // Renderizar mensajes guardados
+  msgs.forEach(m=>{
+    const wrap = document.createElement('div');
+    if (m.role==='user') {
+      wrap.className = 'msg user';
+      wrap.innerHTML = `<div class="msg-avatar">🧑</div>
+        <div class="msg-body"><div class="msg-bubble">${renderMd(m.text)}</div></div>`;
+    } else {
+      wrap.className = 'msg ai';
+      wrap.innerHTML = `<div class="msg-avatar">🧠</div>
+        <div class="msg-body"><div class="msg-bubble">${renderMd(m.text)}</div></div>`;
+    }
+    msgsEl.appendChild(wrap);
+  });
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  closeHistory();
+  renderHistory();
+
+  // Hint indicando que es un chat retomado
+  document.getElementById('hint').textContent = `Chat retomado · ${msgs.length} mensajes cargados`;
+}
+
+// ── Confirm / Delete ─────────────────────────────
+function confirmDeleteChat(id, title) {
+  showConfirm('¿Eliminar este chat?', `"${title.slice(0,38)}"`, ()=>deleteChat(id));
+}
+function confirmClearAll() {
+  showConfirm('¿Borrar todo el historial?', 'Se eliminarán todos los chats. No se puede deshacer.', clearAllHistory);
+}
+function showConfirm(title, desc, fn) {
+  document.getElementById('conf-title').textContent = title;
+  document.getElementById('conf-desc').textContent  = desc;
+  document.getElementById('conf-ok').onclick = ()=>{ fn(); closeConfirm(); };
+  document.getElementById('conf-overlay').classList.add('show');
+}
+function closeConfirm() { document.getElementById('conf-overlay').classList.remove('show'); }
+
+function deleteChat(id) {
+  const idx = hGetIndex().filter(c=>c.id!==id);
+  hSetIndex(idx);
+  hDelMsgs(id);
+  if (hActiveId===id) {
+    hActiveId=null; hMsgs=[];
+    conversationId=null;
+    document.getElementById('new-btn').click();
+  }
+  renderHistory(document.getElementById('hist-search').value);
+}
+function clearAllHistory() {
+  hGetIndex().forEach(c=>hDelMsgs(c.id));
+  hSetIndex([]);
+  hActiveId=null; hMsgs=[];
+  conversationId=null;
+  renderHistory();
+  document.getElementById('new-btn').click();
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  OLLAMA LOCAL — detección y uso desde el frontend
@@ -1960,6 +2414,9 @@ function addMessage(content, role = 'ai', extras = {}) {
 
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
+
+  // ── Guardar en historial (texto plano) ──
+  hPush(role, content);
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2060,7 +2517,7 @@ async function sendMessage(text) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, conversationId }),
+      body: JSON.stringify({ message, conversationId, history: hGetServerHistory() }),
       signal: ctrl.signal
     });
 
@@ -2217,6 +2674,8 @@ document.getElementById('stats-btn').addEventListener('click', () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 document.getElementById('new-btn').addEventListener('click', () => {
   conversationId = null;
+  hActiveId = null;
+  hMsgs = [];
   const msgs = document.getElementById('messages');
   msgs.innerHTML = `
     <div class="welcome" id="welcome-screen">
