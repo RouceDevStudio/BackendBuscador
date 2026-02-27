@@ -13,1655 +13,402 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after {
-  margin: 0; padding: 0;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 :root {
-  --bg:        #0C0C0E;
-  --bg2:       #141417;
-  --bg3:       #1C1C21;
-  --surface:   rgba(28, 28, 33, 0.85);
-  --border:    rgba(255,255,255,0.07);
-  --border2:   rgba(255,255,255,0.12);
-  --text:      #F0EEE8;
-  --text2:     #A8A49C;
-  --text3:     #5C5954;
-  --accent:    #D4A853;       /* amber warm */
-  --accent2:   #E8C074;
-  --accent-bg: rgba(212,168,83,0.08);
-  --user-bg:   rgba(255,255,255,0.06);
-  --user-border:rgba(255,255,255,0.1);
-  --ai-bg:     rgba(212,168,83,0.05);
-  --ai-border: rgba(212,168,83,0.15);
-  --green:     #5CB891;
-  --red:       #E5615A;
-  --radius-sm: 10px;
-  --radius:    16px;
-  --radius-lg: 22px;
-  --shadow:    0 8px 32px rgba(0,0,0,0.5);
-  --glow:      0 0 24px rgba(212,168,83,0.2);
-}
-
-/* ══════════════════════════════════════════
-   PRELOADER
-══════════════════════════════════════════ */
-#preloader {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: #060608;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  transition: opacity 0.6s ease, visibility 0.6s ease;
-}
-
-#preloader.hide {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-/* Background grid */
-#preloader::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(212,168,83,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(212,168,83,0.04) 1px, transparent 1px);
-  background-size: 60px 60px;
-  animation: gridPulse 2s ease-in-out infinite;
-}
-
-@keyframes gridPulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-
-/* Radial glow center */
-#preloader::after {
-  content: '';
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(212,168,83,0.12) 0%, transparent 70%);
-  animation: glowBreath 1.5s ease-in-out infinite;
-}
-
-@keyframes glowBreath {
-  0%, 100% { transform: scale(0.8); opacity: 0.5; }
-  50% { transform: scale(1.2); opacity: 1; }
-}
-
-/* Letters wrapper */
-.pre-letters {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 32px;
-}
-
-.pre-letter {
-  font-family: 'Outfit', sans-serif;
-  font-size: clamp(52px, 12vw, 88px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: transparent;
-  -webkit-text-stroke: 1.5px rgba(212,168,83,0.4);
-  position: relative;
-  display: inline-block;
-  animation: letterReveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  transform-origin: bottom center;
-}
-
-/* Fill animation */
-.pre-letter::before {
-  content: attr(data-l);
-  position: absolute;
-  inset: 0;
-  color: var(--accent, #D4A853);
-  -webkit-text-stroke: 0;
-  clip-path: inset(100% 0 0 0);
-  animation: fillUp 0.4s ease forwards;
-  animation-delay: inherit;
-}
-
-/* Pressure/compression animation */
-.pre-letter.compress {
-  animation: pressureCompression 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-}
-
-@keyframes letterReveal {
-  from {
-    opacity: 0;
-    transform: translateY(40px) scaleY(0.3);
-    filter: blur(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scaleY(1);
-    filter: blur(0);
-  }
-}
-
-@keyframes fillUp {
-  to { clip-path: inset(0% 0 0 0); }
-}
-
-@keyframes pressureCompression {
-  0% { transform: scaleY(1) scaleX(1); }
-  20% { transform: scaleY(0.6) scaleX(1.5); filter: brightness(2); }
-  40% { transform: scaleY(1.2) scaleX(0.85); }
-  60% { transform: scaleY(0.9) scaleX(1.08); }
-  80% { transform: scaleY(1.05) scaleX(0.97); }
-  100% { transform: scaleY(1) scaleX(1); }
-}
-
-/* Individual letter delays */
-.pre-letter:nth-child(1) { animation-delay: 0.1s; }
-.pre-letter:nth-child(1)::before { animation-delay: 0.1s; }
-.pre-letter:nth-child(2) { animation-delay: 0.2s; }
-.pre-letter:nth-child(2)::before { animation-delay: 0.2s; }
-.pre-letter:nth-child(3) { animation-delay: 0.3s; }
-.pre-letter:nth-child(3)::before { animation-delay: 0.3s; }
-.pre-letter:nth-child(4) { animation-delay: 0.4s; }
-.pre-letter:nth-child(4)::before { animation-delay: 0.4s; }
-.pre-letter:nth-child(5) { animation-delay: 0.5s; }
-.pre-letter:nth-child(5)::before { animation-delay: 0.5s; }
-
-/* IA badge */
-.pre-ia {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 18px;
-  align-self: flex-start;
-  margin-top: 10px;
-  opacity: 0;
-  animation: iaAppear 0.4s ease 0.7s forwards;
-}
-
-@keyframes iaAppear {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.pre-ia-letter {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: clamp(18px, 4vw, 28px);
-  font-weight: 500;
-  color: #D4A853;
-  background: rgba(212,168,83,0.12);
-  border: 1px solid rgba(212,168,83,0.3);
-  border-radius: 6px;
-  padding: 4px 8px;
-  position: relative;
-  overflow: hidden;
-  animation: iaPressure 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) 0.85s both;
-}
-
-.pre-ia-letter::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(212,168,83,0.3) 0%, transparent 60%);
-  animation: scanline 1.2s ease 0.9s forwards;
-  transform: translateX(-100%);
-}
-
-@keyframes scanline {
-  to { transform: translateX(200%); }
-}
-
-@keyframes iaPressure {
-  0% { transform: scale(0) rotate(-15deg); }
-  60% { transform: scale(1.3) rotate(3deg); }
-  80% { transform: scale(0.9) rotate(-1deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-
-/* Neural lines */
-.pre-neural {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.pre-neural-line {
-  position: absolute;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212,168,83,0.4), transparent);
-  animation: neuralScan 1.5s ease-in-out infinite;
-  width: 100%;
-}
-
-.pre-neural-line:nth-child(1) { top: 20%; animation-delay: 0s; }
-.pre-neural-line:nth-child(2) { top: 40%; animation-delay: 0.3s; }
-.pre-neural-line:nth-child(3) { top: 60%; animation-delay: 0.6s; }
-.pre-neural-line:nth-child(4) { top: 80%; animation-delay: 0.9s; }
-
-@keyframes neuralScan {
-  0% { transform: translateX(-100%); opacity: 0; }
-  50% { opacity: 1; }
-  100% { transform: translateX(100%); opacity: 0; }
-}
-
-/* Corner accents */
-.pre-corner {
-  position: absolute;
-  width: 40px;
-  height: 40px;
-  z-index: 2;
-}
-
-.pre-corner::before, .pre-corner::after {
-  content: '';
-  position: absolute;
-  background: var(--accent, #D4A853);
-}
-.pre-corner::before { width: 100%; height: 1.5px; top: 0; left: 0; }
-.pre-corner::after { width: 1.5px; height: 100%; top: 0; left: 0; }
-
-.pre-corner.tl { top: 24px; left: 24px; animation: cornerIn 0.5s ease 0.8s both; }
-.pre-corner.tr { top: 24px; right: 24px; transform: rotate(90deg); animation: cornerIn 0.5s ease 0.9s both; }
-.pre-corner.bl { bottom: 24px; left: 24px; transform: rotate(-90deg); animation: cornerIn 0.5s ease 1.0s both; }
-.pre-corner.br { bottom: 24px; right: 24px; transform: rotate(180deg); animation: cornerIn 0.5s ease 1.1s both; }
-
-@keyframes cornerIn {
-  from { opacity: 0; transform-origin: top left; scale: 0; }
-  to { opacity: 1; scale: 1; }
-}
-.pre-corner.tr { transform-origin: top right; }
-.pre-corner.bl { transform-origin: bottom left; }
-.pre-corner.br { transform-origin: bottom right; }
-
-/* Tagline */
-.pre-tagline {
-  position: relative;
-  z-index: 2;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.25em;
-  color: rgba(212,168,83,0.5);
-  text-transform: uppercase;
-  opacity: 0;
-  animation: tagIn 0.4s ease 1s forwards;
-}
-
-@keyframes tagIn {
-  from { opacity: 0; letter-spacing: 0.6em; }
-  to { opacity: 1; letter-spacing: 0.25em; }
-}
-
-/* Loading bar */
-.pre-bar-wrap {
-  position: relative;
-  z-index: 2;
-  width: min(320px, 80vw);
-  height: 2px;
-  background: rgba(212,168,83,0.1);
-  border-radius: 2px;
-  margin-top: 28px;
-  overflow: hidden;
-  opacity: 0;
-  animation: barIn 0.3s ease 1.1s forwards;
-}
-
-@keyframes barIn {
-  to { opacity: 1; }
-}
-
-.pre-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #D4A853, #E8C074, #D4A853);
-  background-size: 200%;
-  border-radius: 2px;
-  animation: barLoad 1.2s cubic-bezier(0.4, 0, 0.2, 1) 1.1s forwards,
-             barShimmer 0.8s linear 1.1s infinite;
-  width: 0%;
-}
-
-@keyframes barLoad {
-  to { width: 100%; }
-}
-
-@keyframes barShimmer {
-  to { background-position: -200% 0; }
-}
-
-/* Particles */
-.pre-particle {
-  position: absolute;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: #D4A853;
-  animation: particleFly linear infinite;
-}
-
-@keyframes particleFly {
-  0% { opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { opacity: 0; transform: translate(var(--tx), var(--ty)); }
-}
-
-html, body {
-  height: 100%;
-  overflow: hidden;
-  font-family: 'Outfit', -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* ── Grain texture overlay ── */
-body::before {
-  content: '';
-  position: fixed; inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.018;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ── Ambient light ── */
-body::after {
-  content: '';
-  position: fixed;
-  top: -20%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80vw;
-  height: 60vh;
-  background: radial-gradient(ellipse, rgba(212,168,83,0.06) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ── App Shell ── */
-/* Usa --vh dinámica calculada en JS para evitar que las barras del browser tapen contenido */
-.app {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  height: 100dvh;
-  height: calc(var(--app-h, 100vh));
-  display: flex;
-  flex-direction: column;
-  max-width: 720px;
-  margin: 0 auto;
-  /* Safe areas para notch/punch-hole/barra de inicio */
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
-}
-
-/* ── Header ── */
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  background: rgba(12,12,14,0.9);
-  backdrop-filter: blur(24px);
-  border-bottom: 1px solid var(--border);
-  position: relative;
-  z-index: 10;
-  flex-shrink: 0;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.logo-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #2A2318 0%, #1A1710 100%);
-  border: 1px solid rgba(212,168,83,0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.logo-mark svg {
-  width: 18px;
-  height: 18px;
-  fill: var(--accent);
-  position: relative;
-  z-index: 1;
-}
-
-.logo-mark::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 40% 40%, rgba(212,168,83,0.15) 0%, transparent 60%);
-}
-
-.brand {
-  display: flex;
-  flex-direction: column;
-}
-
-.brand-name {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text);
-}
-
-.brand-sub {
-  font-size: 10px;
-  font-family: 'IBM Plex Mono', monospace;
-  color: var(--text3);
-  letter-spacing: 0.08em;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* ── Status pill in header ── */
-.status-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  font-size: 11px;
-  font-family: 'IBM Plex Mono', monospace;
-  color: var(--text2);
-  transition: all 0.3s;
-}
-
-.status-pill.live {
-  border-color: rgba(92,184,145,0.25);
-  background: rgba(92,184,145,0.06);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text3);
-  flex-shrink: 0;
-  transition: all 0.3s;
-}
-
-.status-dot.on {
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse-dot 2s infinite;
-}
-
-@keyframes pulse-dot {
-  0%,100% { opacity:1; }
-  50% { opacity:0.5; }
-}
-
-/* ── Thinking indicator in header (shows while busy) ── */
-.thinking-pill {
-  display: none;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  background: var(--accent-bg);
-  border: 1px solid rgba(212,168,83,0.2);
-  border-radius: 99px;
-  font-size: 11px;
-  font-family: 'IBM Plex Mono', monospace;
-  color: var(--accent);
-}
-
-.thinking-pill.show {
-  display: flex;
-}
-
-.thinking-orbs {
-  display: flex;
-  gap: 3px;
-}
-
-.thinking-orbs span {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: orb 1.2s ease-in-out infinite;
-}
-
-.thinking-orbs span:nth-child(2) { animation-delay: 0.2s; }
-.thinking-orbs span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes orb {
-  0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
-}
-
-/* ── Btn ── */
-.btn-icon {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--text2);
-  cursor: pointer;
-  transition: all 0.15s;
-  font-size: 15px;
-  position: relative;
-}
-
-.btn-icon:active {
-  transform: scale(0.93);
-  background: var(--border2);
-}
-
-.btn-icon.active {
-  background: var(--accent-bg);
-  border-color: rgba(212,168,83,0.3);
-  color: var(--accent2);
-}
-
-/* ── Messages area ── */
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-}
-
-.messages::-webkit-scrollbar { width: 3px; }
-.messages::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
-  border-radius: 10px;
-}
-
-/* ── Welcome screen ── */
-.welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 32px 20px 24px;
-  gap: 16px;
-  animation: fadeUp 0.5s ease-out;
-  flex: 1;
-}
-
-@keyframes fadeUp {
-  from { opacity:0; transform:translateY(16px); }
-  to   { opacity:1; transform:translateY(0); }
-}
-
-.welcome-glyph {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: linear-gradient(145deg, #221C10 0%, #16130A 100%);
-  border: 1px solid rgba(212,168,83,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--glow);
-  animation: float 4s ease-in-out infinite;
-}
-
-.welcome-glyph svg {
-  width: 32px;
-  height: 32px;
-  fill: var(--accent);
-}
-
-@keyframes float {
-  0%,100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-
-.welcome h2 {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-
-.welcome p {
-  font-size: 14px;
-  color: var(--text2);
-  line-height: 1.65;
-  max-width: 320px;
-}
-
-.suggestions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  width: 100%;
-  margin-top: 8px;
-}
-
-.sug {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 13px 14px;
-  cursor: pointer;
-  text-align: left;
-  color: var(--text2);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  transition: all 0.18s;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sug-icon { font-size: 18px; }
-.sug-text { font-size: 12px; color: var(--text3); }
-
-.sug:active {
-  transform: scale(0.97);
-  background: var(--border2);
-  border-color: rgba(212,168,83,0.2);
-}
-
-/* ── Date separator ── */
-.date-sep {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text3);
-  font-size: 11px;
-  font-family: 'IBM Plex Mono', monospace;
-  letter-spacing: 0.05em;
-  margin: 12px 0 4px;
-}
-
-.date-sep::before,
-.date-sep::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-/* ── Message ── */
-.msg {
-  display: flex;
-  gap: 10px;
-  animation: msgIn 0.25s ease-out;
-  padding: 2px 0;
-}
-
-@keyframes msgIn {
-  from { opacity:0; transform:translateY(8px); }
-  to   { opacity:1; transform:translateY(0); }
-}
-
-.msg.user {
-  flex-direction: row-reverse;
-}
-
-.msg-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-  align-self: flex-end;
-  margin-bottom: 2px;
-}
-
-.msg.user .msg-avatar {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid var(--border2);
-}
-
-.msg.ai .msg-avatar {
-  background: linear-gradient(145deg, #221C10 0%, #181410 100%);
-  border: 1px solid rgba(212,168,83,0.2);
-}
-
-.msg-body {
-  max-width: 80%;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.msg.user .msg-body { align-items: flex-end; }
-
-.msg-bubble {
-  padding: 11px 15px;
-  border-radius: var(--radius);
-  font-size: 15px;
-  line-height: 1.6;
-  word-wrap: break-word;
-  position: relative;
-}
-
-.msg.user .msg-bubble {
-  background: var(--user-bg);
-  border: 1px solid var(--user-border);
-  border-bottom-right-radius: 5px;
-  color: var(--text);
-}
-
-.msg.ai .msg-bubble {
-  background: var(--ai-bg);
-  border: 1px solid var(--ai-border);
-  border-bottom-left-radius: 5px;
-  color: var(--text);
-}
-
-.msg-bubble code {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12.5px;
-  background: rgba(0,0,0,0.35);
-  padding: 1px 5px;
-  border-radius: 4px;
-  color: var(--accent2);
-}
-
-.msg-bubble strong { color: var(--accent2); font-weight: 600; }
-.msg-bubble a { color: var(--accent2); text-underline-offset: 3px; }
-
-.msg-meta {
-  font-size: 10px;
-  color: var(--text3);
-  font-family: 'IBM Plex Mono', monospace;
-  padding: 0 4px;
-}
-
-/* ── Neural badge ── */
-.neural-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 6px;
-}
-
-.chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  color: var(--text3);
-  background: rgba(0,0,0,0.3);
-  border: 1px solid var(--border);
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-
-.chip-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* ── Error bubble ── */
-.msg-error {
-  background: rgba(229,97,90,0.07);
-  border: 1px solid rgba(229,97,90,0.2);
-  border-radius: var(--radius);
-  padding: 11px 15px;
-  font-size: 14px;
-  color: var(--red);
-  max-width: 80%;
-  margin-left: 40px;
-}
-
-/* ── Thinking bubble ── */
-.thinking-bubble {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  background: var(--ai-bg);
-  border: 1px solid var(--ai-border);
-  border-radius: var(--radius);
-  border-bottom-left-radius: 5px;
-  font-size: 13px;
-  color: var(--text2);
-  max-width: 200px;
-}
-
-.thinking-bar {
-  display: flex;
-  gap: 4px;
-}
-
-.thinking-bar span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: orb 1.4s ease-in-out infinite;
-}
-.thinking-bar span:nth-child(2) { animation-delay: 0.2s; }
-.thinking-bar span:nth-child(3) { animation-delay: 0.4s; }
-
-/* ── Timer ── */
-.elapsed {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  color: var(--accent);
-  opacity: 0.7;
-}
-
-/* ── Input area ── */
-.input-zone {
-  flex-shrink: 0;
-  padding: 12px 14px 16px;
-  background: rgba(12,12,14,0.92);
-  backdrop-filter: blur(24px);
-  border-top: 1px solid var(--border);
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
-}
-
-.input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-lg);
-  padding: 6px 6px 6px 14px;
-  transition: border-color 0.2s;
-}
-
-.input-row:focus-within {
-  border-color: rgba(212,168,83,0.3);
-  box-shadow: 0 0 0 3px rgba(212,168,83,0.06);
-}
-
-.input-row textarea {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  font-family: inherit;
-  font-size: 15px;
-  color: var(--text);
-  line-height: 1.5;
-  padding: 7px 0;
-  max-height: 140px;
-  overflow-y: auto;
-}
-
-.input-row textarea::placeholder { color: var(--text3); }
-
-.input-row textarea::-webkit-scrollbar { width: 0; }
-
-.send-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius);
-  background: var(--accent);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-
-.send-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: #0C0C0E;
-  transform: translateX(1px);
-}
-
-.send-btn:active { transform: scale(0.93); }
-.send-btn:disabled {
-  background: var(--bg3);
-  cursor: not-allowed;
-}
-.send-btn:disabled svg { fill: var(--text3); }
-
-.hint {
-  text-align: center;
-  font-size: 11px;
-  color: var(--text3);
-  font-family: 'IBM Plex Mono', monospace;
-  margin-top: 8px;
-  min-height: 14px;
-}
-
-/* ── Stats drawer ── */
-.drawer-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(4px);
-  z-index: 90;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s;
-}
-
-.drawer-overlay.show {
-  opacity: 1;
-  pointer-events: all;
-}
-
-.drawer {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  max-width: 720px;
-  margin: 0 auto;
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-bottom: none;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  z-index: 100;
-  transform: translateY(100%);
-  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
-  max-height: 65vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.drawer.open {
-  transform: translateY(0);
-}
-
-.drawer-handle {
-  width: 36px;
-  height: 4px;
-  background: var(--border2);
-  border-radius: 2px;
-  margin: 12px auto 0;
-  flex-shrink: 0;
-}
-
-.drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px 12px;
-  flex-shrink: 0;
-}
-
-.drawer-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.drawer-body {
-  overflow-y: auto;
-  padding: 0 18px 24px;
-  flex: 1;
-}
-
-.drawer-body::-webkit-scrollbar { width: 0; }
-
-.section-label {
-  font-size: 10px;
-  font-family: 'IBM Plex Mono', monospace;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text3);
-  margin: 16px 0 8px;
-}
-
-.stat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.stat-row:last-child { border-bottom: none; }
-
-.stat-label { font-size: 14px; color: var(--text2); }
-
-.stat-val {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--accent2);
-}
-
-.pbar {
-  height: 3px;
-  background: var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-top: 2px;
-}
-
-.pbar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 100%);
-  border-radius: 10px;
-  transition: width 0.6s ease;
-  box-shadow: 0 0 8px rgba(212,168,83,0.4);
-}
-
-.llm-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.llm-card.live {
-  border-color: rgba(92,184,145,0.25);
-  background: rgba(92,184,145,0.04);
-}
-
-.llm-card-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--text3);
-  flex-shrink: 0;
-}
-
-.llm-card.live .llm-card-dot {
-  background: var(--green);
-  box-shadow: 0 0 8px var(--green);
-  animation: pulse-dot 2s infinite;
-}
-
-.llm-card-info h4 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.llm-card-info p {
-  font-size: 12px;
-  color: var(--text3);
-  margin-top: 2px;
-}
-
-/* ── Busy notice ── */
-.busy-notice {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--accent-bg);
-  border: 1px solid rgba(212,168,83,0.15);
-  border-radius: var(--radius);
-  font-size: 12px;
-  color: var(--accent);
-  margin-top: 12px;
-}
-
-.busy-notice.show { display: flex; }
-
-/* ── Ollama banner (debajo del header) ── */
-.ollama-banner {
-  display: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 16px;
-  background: rgba(92,184,145,0.06);
-  border-bottom: 1px solid rgba(92,184,145,0.15);
-  font-size: 12px;
-  color: var(--green);
-  font-family: 'IBM Plex Mono', monospace;
-  flex-shrink: 0;
-  animation: fadeUp 0.3s ease-out;
-}
-.ollama-banner.show { display: flex; }
-.ollama-banner-left { display: flex; align-items: center; gap: 8px; }
-.ollama-banner-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse-dot 2s infinite;
-  flex-shrink: 0;
-}
-.ollama-banner-btn {
-  background: none; border: none;
-  color: var(--green); cursor: pointer;
-  font-size: 11px; font-family: 'IBM Plex Mono', monospace;
-  text-decoration: underline; padding: 0;
-  opacity: 0.8;
-  flex-shrink: 0;
-}
-
-/* ── Ollama "no detectado" banner ── */
-.ollama-offline-banner {
-  display: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 16px;
-  background: rgba(212,168,83,0.05);
-  border-bottom: 1px solid rgba(212,168,83,0.1);
-  font-size: 12px;
-  color: var(--text3);
-  font-family: 'IBM Plex Mono', monospace;
-  flex-shrink: 0;
-}
-.ollama-offline-banner.show { display: flex; }
-.ollama-offline-btn {
-  background: none; border: 1px solid rgba(212,168,83,0.25);
-  color: var(--accent); cursor: pointer;
-  font-size: 11px; font-family: 'IBM Plex Mono', monospace;
-  padding: 4px 10px; border-radius: 6px;
-  white-space: nowrap; flex-shrink: 0;
-}
-
-/* ── Ollama setup modal ── */
-.ollama-modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.7);
-  backdrop-filter: blur(6px);
-  z-index: 200;
-  display: none;
-  align-items: flex-end;
-  justify-content: center;
-}
-.ollama-modal-overlay.show { display: flex; }
-
-.ollama-modal {
-  background: var(--bg2);
-  border: 1px solid var(--border2);
-  border-bottom: none;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  width: 100%;
-  max-width: 720px;
-  max-height: 80vh;
-  overflow-y: auto;
-  padding: 0 0 32px;
-  animation: slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
-}
-
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
-
-.ollama-modal::-webkit-scrollbar { width: 0; }
-
-.ollama-modal-handle {
-  width: 36px; height: 4px;
-  background: var(--border2);
-  border-radius: 2px;
-  margin: 12px auto 0;
-}
-
-.ollama-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px 0;
-}
-
-.ollama-modal-title {
-  font-size: 16px; font-weight: 700;
-  color: var(--text);
-}
-
-.ollama-modal-close {
-  width: 30px; height: 30px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text2); cursor: pointer;
-  font-size: 14px;
-}
-
-.ollama-modal-body {
-  padding: 16px 18px 0;
-}
-
-.ollama-modal-body p {
-  font-size: 13px;
-  color: var(--text2);
-  line-height: 1.65;
-  margin-bottom: 16px;
-}
-
-/* tabs */
-.ollama-tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-
-.ollama-tab {
-  flex: 1;
-  padding: 9px 12px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text2);
-  cursor: pointer;
-  transition: all 0.15s;
-  text-align: center;
-}
-
-.ollama-tab.active {
-  background: var(--accent-bg);
-  border-color: rgba(212,168,83,0.3);
-  color: var(--accent2);
-}
-
-.ollama-tab-content { display: none; }
-.ollama-tab-content.active { display: block; }
-
-/* steps */
-.ollama-steps { display: flex; flex-direction: column; gap: 12px; }
-
-.ollama-step {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.ollama-step-num {
-  width: 26px; height: 26px;
-  border-radius: 50%;
-  background: var(--accent-bg);
-  border: 1px solid rgba(212,168,83,0.25);
-  color: var(--accent2);
-  font-size: 12px;
-  font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.ollama-step-info h4 {
-  font-size: 13px; font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-
-.ollama-step-info p {
-  font-size: 12px; color: var(--text2);
-  margin-bottom: 0;
-  line-height: 1.5;
-}
-
-.ollama-code {
-  background: rgba(0,0,0,0.4);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  color: var(--accent2);
-  margin-top: 6px;
-  white-space: pre;
-  overflow-x: auto;
-  position: relative;
-}
-
-.ollama-copy-btn {
-  position: absolute;
-  top: 6px; right: 6px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text3);
-  font-size: 10px;
-  font-family: 'IBM Plex Mono', monospace;
-  padding: 2px 7px;
-  cursor: pointer;
-}
-
-.ollama-note {
-  background: rgba(212,168,83,0.05);
-  border: 1px solid rgba(212,168,83,0.12);
-  border-radius: var(--radius-sm);
-  padding: 10px 13px;
-  font-size: 12px;
-  color: var(--accent);
-  margin-top: 16px;
-  line-height: 1.6;
-}
-
-/* card en el drawer */
-.ollama-local-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-top: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.ollama-local-card:active { opacity: 0.8; }
-.ollama-local-card.live {
-  border-color: rgba(92,184,145,0.25);
-  background: rgba(92,184,145,0.04);
-}
-.ollama-local-dot {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: var(--text3);
-  flex-shrink: 0;
-}
-.ollama-local-card.live .ollama-local-dot {
-  background: var(--green);
-  box-shadow: 0 0 8px var(--green);
-  animation: pulse-dot 2s infinite;
-}
-.ollama-local-info h4 {
-  font-size: 13px; font-weight: 600;
-  color: var(--text);
-}
-.ollama-local-info p {
-  font-size: 12px; color: var(--text3);
-  margin-top: 2px;
-}
-
-/* ── PWA Install Banner ── */
-.pwa-banner {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 9000;
-  background: linear-gradient(135deg, #1A1710 0%, #0F0D09 100%);
-  border-top: 1px solid rgba(212,168,83,0.25);
-  padding: 14px 18px;
-  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  transform: translateY(100%);
-  transition: transform 0.4s cubic-bezier(0.34,1.2,0.64,1);
-  box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
-}
-.pwa-banner.show { transform: translateY(0); }
-.pwa-banner-icon {
-  width: 44px; height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(145deg,#2A2318,#1A1710);
-  border: 1px solid rgba(212,168,83,0.3);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  font-size: 22px;
-}
-.pwa-banner-text { flex: 1; }
-.pwa-banner-text strong {
-  display: block; font-size: 13px;
-  color: var(--text); font-weight: 600;
-}
-.pwa-banner-text span {
-  font-size: 11px; color: var(--text3);
-}
-.pwa-banner-btns { display: flex; gap: 8px; }
-.pwa-install-btn {
-  padding: 8px 16px;
-  background: var(--accent);
-  border: none; border-radius: 8px;
-  color: #0C0C0E; font-family: inherit;
-  font-size: 13px; font-weight: 700;
-  cursor: pointer; white-space: nowrap;
-  transition: all 0.15s;
-}
-.pwa-install-btn:active { transform: scale(0.96); }
-.pwa-dismiss-btn {
-  padding: 8px 10px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text3); font-family: inherit;
-  font-size: 12px; cursor: pointer;
-  transition: all 0.15s;
-}
-
-/* Ajuste del input-zone para safe area */
-.input-zone {
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
-}
-  .app {
-    border-left: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-  }
-}
-
-@media (max-width: 380px) {
-  .suggestions { grid-template-columns: 1fr; }
-  .msg-body { max-width: 87%; }
-}
-
-/* ═══════════════════════════════════════════
-   HISTORY SIDEBAR
-═══════════════════════════════════════════ */
-.hist-overlay {
-  position:fixed; inset:0;
-  background:rgba(0,0,0,0.55);
-  backdrop-filter:blur(3px);
-  z-index:200;
-  opacity:0; visibility:hidden;
-  transition:opacity .25s,visibility .25s;
-}
-.hist-overlay.show { opacity:1; visibility:visible; }
-
-.hist-sidebar {
-  position:fixed; top:0; left:0; bottom:0;
-  width:min(300px,86vw);
-  background:#0F0F13;
-  border-right:1px solid var(--border2);
-  z-index:201;
-  display:flex; flex-direction:column;
-  transform:translateX(-100%);
-  transition:transform .28s cubic-bezier(.4,0,.2,1);
-  box-shadow:6px 0 32px rgba(0,0,0,.7);
-}
-.hist-sidebar.open { transform:translateX(0); }
-
-.hist-head {
-  display:flex; align-items:center;
-  justify-content:space-between;
-  padding:18px 14px 12px;
-  border-bottom:1px solid var(--border);
-  flex-shrink:0;
-}
-.hist-title {
-  display:flex; align-items:center;
-  gap:8px; font-size:15px;
-  font-weight:700; color:var(--text);
-}
-.hist-del-all {
-  width:28px; height:28px;
-  display:flex; align-items:center; justify-content:center;
-  background:transparent;
-  border:1px solid var(--border);
-  border-radius:7px; color:var(--text3);
-  cursor:pointer; transition:all .15s;
-}
-.hist-del-all:hover {
-  background:rgba(229,97,90,.1);
-  border-color:rgba(229,97,90,.3);
-  color:var(--red);
-}
-
-.hist-search-wrap {
-  position:relative; padding:10px 12px 6px;
-  flex-shrink:0;
-}
-.hist-search {
-  width:100%; background:var(--bg3);
-  border:1px solid var(--border);
-  border-radius:9px;
-  padding:8px 12px 8px 32px;
-  color:var(--text); font-family:inherit;
-  font-size:13px; outline:none;
-  transition:border-color .2s;
-}
+  --bg:#0C0C0E; --bg2:#141417; --bg3:#1C1C21;
+  --surface:rgba(28,28,33,0.85); --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.12);
+  --text:#F0EEE8; --text2:#A8A49C; --text3:#5C5954;
+  --accent:#D4A853; --accent2:#E8C074; --accent-bg:rgba(212,168,83,0.08);
+  --user-bg:rgba(255,255,255,0.06); --user-border:rgba(255,255,255,0.1);
+  --ai-bg:rgba(212,168,83,0.05); --ai-border:rgba(212,168,83,0.15);
+  --green:#5CB891; --red:#E5615A; --blue:#60A5FA;
+  --radius-sm:10px; --radius:16px; --radius-lg:22px;
+  --shadow:0 8px 32px rgba(0,0,0,0.5); --glow:0 0 24px rgba(212,168,83,0.2);
+}
+
+/* ══ PRELOADER ══ */
+#preloader { position:fixed; inset:0; z-index:9999; background:#060608; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; transition:opacity 0.6s ease,visibility 0.6s ease; }
+#preloader.hide { opacity:0; visibility:hidden; pointer-events:none; }
+#preloader::before { content:''; position:absolute; inset:0; background-image:linear-gradient(rgba(212,168,83,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(212,168,83,0.04) 1px,transparent 1px); background-size:60px 60px; animation:gridPulse 2s ease-in-out infinite; }
+#preloader::after { content:''; position:absolute; width:600px; height:600px; border-radius:50%; background:radial-gradient(circle,rgba(212,168,83,0.12) 0%,transparent 70%); animation:glowBreath 1.5s ease-in-out infinite; }
+@keyframes gridPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+@keyframes glowBreath { 0%,100%{transform:scale(.8);opacity:.5} 50%{transform:scale(1.2);opacity:1} }
+.pre-letters { position:relative; z-index:2; display:flex; align-items:center; gap:6px; margin-bottom:32px; }
+.pre-letter { font-family:'Outfit',sans-serif; font-size:clamp(52px,12vw,88px); font-weight:700; letter-spacing:-0.02em; color:transparent; -webkit-text-stroke:1.5px rgba(212,168,83,0.4); position:relative; display:inline-block; animation:letterReveal 0.5s cubic-bezier(0.34,1.56,0.64,1) both; transform-origin:bottom center; }
+.pre-letter::before { content:attr(data-l); position:absolute; inset:0; color:var(--accent); -webkit-text-stroke:0; clip-path:inset(100% 0 0 0); animation:fillUp 0.4s ease forwards; animation-delay:inherit; }
+.pre-letter.compress { animation:pressureCompression 0.35s cubic-bezier(0.36,0.07,0.19,0.97) both; }
+@keyframes letterReveal { from{opacity:0;transform:translateY(40px) scaleY(0.3);filter:blur(8px)} to{opacity:1;transform:translateY(0) scaleY(1);filter:blur(0)} }
+@keyframes fillUp { to{clip-path:inset(0% 0 0 0)} }
+@keyframes pressureCompression { 0%{transform:scaleY(1) scaleX(1)} 20%{transform:scaleY(0.6) scaleX(1.5);filter:brightness(2)} 40%{transform:scaleY(1.2) scaleX(0.85)} 60%{transform:scaleY(0.9) scaleX(1.08)} 80%{transform:scaleY(1.05) scaleX(0.97)} 100%{transform:scaleY(1) scaleX(1)} }
+.pre-letter:nth-child(1){animation-delay:.1s} .pre-letter:nth-child(1)::before{animation-delay:.1s}
+.pre-letter:nth-child(2){animation-delay:.2s} .pre-letter:nth-child(2)::before{animation-delay:.2s}
+.pre-letter:nth-child(3){animation-delay:.3s} .pre-letter:nth-child(3)::before{animation-delay:.3s}
+.pre-letter:nth-child(4){animation-delay:.4s} .pre-letter:nth-child(4)::before{animation-delay:.4s}
+.pre-letter:nth-child(5){animation-delay:.5s} .pre-letter:nth-child(5)::before{animation-delay:.5s}
+.pre-ia { position:relative; z-index:2; display:flex; align-items:center; gap:3px; margin-left:18px; align-self:flex-start; margin-top:10px; opacity:0; animation:iaAppear 0.4s ease 0.7s forwards; }
+@keyframes iaAppear { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+.pre-ia-letter { font-family:'IBM Plex Mono',monospace; font-size:clamp(18px,4vw,28px); font-weight:500; color:#D4A853; background:rgba(212,168,83,0.12); border:1px solid rgba(212,168,83,0.3); border-radius:6px; padding:4px 8px; position:relative; overflow:hidden; animation:iaPressure 0.6s cubic-bezier(0.36,0.07,0.19,0.97) 0.85s both; }
+.pre-ia-letter::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(212,168,83,0.3) 0%,transparent 60%); animation:scanline 1.2s ease 0.9s forwards; transform:translateX(-100%); }
+@keyframes scanline { to{transform:translateX(200%)} }
+@keyframes iaPressure { 0%{transform:scale(0) rotate(-15deg)} 60%{transform:scale(1.3) rotate(3deg)} 80%{transform:scale(0.9) rotate(-1deg)} 100%{transform:scale(1) rotate(0deg)} }
+.pre-neural { position:absolute; inset:0; z-index:1; pointer-events:none; }
+.pre-neural-line { position:absolute; height:1px; background:linear-gradient(90deg,transparent,rgba(212,168,83,0.4),transparent); animation:neuralScan 1.5s ease-in-out infinite; width:100%; }
+.pre-neural-line:nth-child(1){top:20%;animation-delay:0s} .pre-neural-line:nth-child(2){top:40%;animation-delay:.3s} .pre-neural-line:nth-child(3){top:60%;animation-delay:.6s} .pre-neural-line:nth-child(4){top:80%;animation-delay:.9s}
+@keyframes neuralScan { 0%{transform:translateX(-100%);opacity:0} 50%{opacity:1} 100%{transform:translateX(100%);opacity:0} }
+.pre-corner { position:absolute; width:40px; height:40px; z-index:2; }
+.pre-corner::before,.pre-corner::after { content:''; position:absolute; background:var(--accent); }
+.pre-corner::before{width:100%;height:1.5px;top:0;left:0} .pre-corner::after{width:1.5px;height:100%;top:0;left:0}
+.pre-corner.tl{top:24px;left:24px;animation:cornerIn .5s ease .8s both} .pre-corner.tr{top:24px;right:24px;transform:rotate(90deg);animation:cornerIn .5s ease .9s both} .pre-corner.bl{bottom:24px;left:24px;transform:rotate(-90deg);animation:cornerIn .5s ease 1s both} .pre-corner.br{bottom:24px;right:24px;transform:rotate(180deg);animation:cornerIn .5s ease 1.1s both}
+@keyframes cornerIn { from{opacity:0;scale:0} to{opacity:1;scale:1} }
+.pre-tagline { position:relative; z-index:2; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.25em; color:rgba(212,168,83,0.5); text-transform:uppercase; opacity:0; animation:tagIn .4s ease 1s forwards; }
+@keyframes tagIn { from{opacity:0;letter-spacing:.6em} to{opacity:1;letter-spacing:.25em} }
+.pre-bar-wrap { position:relative; z-index:2; width:min(320px,80vw); height:2px; background:rgba(212,168,83,0.1); border-radius:2px; margin-top:28px; overflow:hidden; opacity:0; animation:barIn .3s ease 1.1s forwards; }
+@keyframes barIn { to{opacity:1} }
+.pre-bar { height:100%; background:linear-gradient(90deg,#D4A853,#E8C074,#D4A853); background-size:200%; border-radius:2px; animation:barLoad 1.2s cubic-bezier(.4,0,.2,1) 1.1s forwards,barShimmer .8s linear 1.1s infinite; width:0%; }
+@keyframes barLoad { to{width:100%} }
+@keyframes barShimmer { to{background-position:-200% 0} }
+.pre-particle { position:absolute; width:2px; height:2px; border-radius:50%; background:#D4A853; animation:particleFly linear infinite; }
+@keyframes particleFly { 0%{opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{opacity:0;transform:translate(var(--tx),var(--ty))} }
+
+/* ══ GLOBAL ══ */
+html,body { height:100%; overflow:hidden; font-family:'Outfit',-apple-system,sans-serif; background:var(--bg); color:var(--text); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+body::before { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E"); opacity:.018; pointer-events:none; z-index:0; }
+body::after { content:''; position:fixed; top:-20%; left:50%; transform:translateX(-50%); width:80vw; height:60vh; background:radial-gradient(ellipse,rgba(212,168,83,0.06) 0%,transparent 70%); pointer-events:none; z-index:0; }
+
+/* ══ AUTH SCREEN ══ */
+.auth-screen { position:fixed; inset:0; z-index:5000; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:20px; animation:fadeUp .4s ease; }
+.auth-screen.hidden { display:none; }
+.auth-card { width:100%; max-width:400px; background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow); }
+.auth-header { padding:28px 24px 20px; text-align:center; background:linear-gradient(180deg,rgba(212,168,83,0.06) 0%,transparent 100%); border-bottom:1px solid var(--border); }
+.auth-logo { width:52px; height:52px; background:linear-gradient(145deg,#2A2318,#1A1710); border:1px solid rgba(212,168,83,0.3); border-radius:14px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:var(--glow); }
+.auth-logo svg { width:26px; height:26px; fill:var(--accent); }
+.auth-header h1 { font-size:22px; font-weight:700; letter-spacing:-.01em; }
+.auth-header p { font-size:13px; color:var(--text3); margin-top:4px; font-family:'IBM Plex Mono',monospace; letter-spacing:.03em; }
+.auth-body { padding:22px 24px 28px; }
+.auth-tabs { display:flex; background:var(--bg3); border-radius:var(--radius-sm); padding:3px; margin-bottom:20px; }
+.auth-tab { flex:1; padding:8px; text-align:center; border-radius:8px; font-size:13px; font-weight:600; color:var(--text3); cursor:pointer; transition:all .15s; border:none; background:transparent; font-family:inherit; }
+.auth-tab.active { background:var(--accent); color:#0C0C0E; }
+.auth-field { margin-bottom:14px; }
+.auth-field label { display:block; font-size:12px; color:var(--text3); margin-bottom:5px; font-family:'IBM Plex Mono',monospace; letter-spacing:.04em; text-transform:uppercase; }
+.auth-field input { width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:11px 14px; font-family:inherit; font-size:14px; color:var(--text); outline:none; transition:border-color .2s; }
+.auth-field input:focus { border-color:rgba(212,168,83,0.4); box-shadow:0 0 0 3px rgba(212,168,83,0.07); }
+.auth-field input::placeholder { color:var(--text3); }
+.auth-submit { width:100%; padding:13px; background:var(--accent); border:none; border-radius:var(--radius-sm); font-family:inherit; font-size:15px; font-weight:700; color:#0C0C0E; cursor:pointer; transition:all .15s; margin-top:4px; }
+.auth-submit:hover { background:var(--accent2); }
+.auth-submit:active { transform:scale(.97); }
+.auth-submit:disabled { opacity:.5; cursor:not-allowed; }
+.auth-error { background:rgba(229,97,90,0.1); border:1px solid rgba(229,97,90,0.25); border-radius:var(--radius-sm); padding:10px 13px; font-size:13px; color:var(--red); margin-bottom:14px; }
+.auth-hint { text-align:center; font-size:12px; color:var(--text3); margin-top:16px; }
+
+/* ══ APP SHELL ══ */
+.app { position:fixed; inset:0; z-index:1; height:100dvh; height:calc(var(--app-h,100vh)); display:flex; flex-direction:column; max-width:720px; margin:0 auto; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px); }
+@media(min-width:721px) { .app { border-left:1px solid var(--border); border-right:1px solid var(--border); } }
+
+/* ══ HEADER ══ */
+.header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:rgba(12,12,14,0.9); backdrop-filter:blur(24px); border-bottom:1px solid var(--border); position:relative; z-index:10; flex-shrink:0; }
+.logo { display:flex; align-items:center; gap:10px; }
+.logo-mark { width:32px; height:32px; border-radius:9px; background:linear-gradient(145deg,#2A2318,#1A1710); border:1px solid rgba(212,168,83,0.25); display:flex; align-items:center; justify-content:center; }
+.logo-mark svg { width:16px; height:16px; fill:var(--accent); }
+.brand-name { font-size:16px; font-weight:700; letter-spacing:.04em; }
+.brand-sub { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--text3); letter-spacing:.08em; }
+.header-right { display:flex; align-items:center; gap:6px; }
+.status-pill { display:flex; align-items:center; gap:6px; padding:5px 10px; background:var(--bg3); border:1px solid var(--border); border-radius:99px; font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--text2); transition:all .3s; }
+.status-pill.live { border-color:rgba(92,184,145,0.25); background:rgba(92,184,145,0.06); }
+.status-dot { width:6px; height:6px; border-radius:50%; background:var(--text3); flex-shrink:0; transition:all .3s; }
+.status-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.5} }
+.thinking-pill { display:none; align-items:center; gap:6px; padding:5px 10px; background:var(--accent-bg); border:1px solid rgba(212,168,83,0.2); border-radius:99px; font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--accent); }
+.thinking-pill.show { display:flex; }
+.thinking-orbs { display:flex; gap:3px; }
+.thinking-orbs span { width:4px; height:4px; border-radius:50%; background:var(--accent); animation:orb 1.2s ease-in-out infinite; }
+.thinking-orbs span:nth-child(2){animation-delay:.2s} .thinking-orbs span:nth-child(3){animation-delay:.4s}
+@keyframes orb { 0%,80%,100%{transform:scale(.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
+.btn-icon { width:34px; height:34px; display:flex; align-items:center; justify-content:center; background:var(--bg3); border:1px solid var(--border); border-radius:9px; color:var(--text2); cursor:pointer; transition:all .15s; font-size:15px; }
+.btn-icon:active { transform:scale(.93); background:var(--border2); }
+.btn-icon.active { background:var(--accent-bg); border-color:rgba(212,168,83,0.3); color:var(--accent2); }
+
+/* ══ BOTTOM NAV TABS ══ */
+.bottom-nav { display:flex; background:rgba(12,12,14,0.95); backdrop-filter:blur(24px); border-top:1px solid var(--border); flex-shrink:0; padding-bottom:env(safe-area-inset-bottom,0px); }
+.bottom-nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:9px 4px; cursor:pointer; border:none; background:transparent; color:var(--text3); font-family:inherit; transition:all .15s; font-size:10px; font-family:'IBM Plex Mono',monospace; letter-spacing:.03em; }
+.bottom-nav-btn svg { width:20px; height:20px; transition:all .15s; }
+.bottom-nav-btn.active { color:var(--accent); }
+.bottom-nav-btn.active svg { filter:drop-shadow(0 0 6px rgba(212,168,83,0.5)); }
+.bottom-nav-btn:active { opacity:.6; }
+
+/* ══ TAB PANELS ══ */
+.tab-panel { display:none; flex:1; flex-direction:column; overflow:hidden; }
+.tab-panel.active { display:flex; }
+
+/* ══ CHAT PANEL ══ */
+.messages { flex:1; overflow-y:auto; overflow-x:hidden; padding:20px 16px; display:flex; flex-direction:column; gap:4px; scroll-behavior:smooth; -webkit-overflow-scrolling:touch; }
+.messages::-webkit-scrollbar { width:3px; }
+.messages::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:10px; }
+.welcome { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px 20px 24px; gap:16px; animation:fadeUp .5s ease-out; flex:1; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+.welcome-glyph { width:64px; height:64px; border-radius:18px; background:linear-gradient(145deg,#221C10,#16130A); border:1px solid rgba(212,168,83,0.2); display:flex; align-items:center; justify-content:center; box-shadow:var(--glow); animation:float 4s ease-in-out infinite; }
+.welcome-glyph svg { width:32px; height:32px; fill:var(--accent); }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+.welcome h2 { font-size:26px; font-weight:700; letter-spacing:-.02em; }
+.welcome p { font-size:14px; color:var(--text2); line-height:1.65; max-width:320px; }
+.suggestions { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; margin-top:8px; }
+.sug { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); padding:13px 14px; cursor:pointer; text-align:left; color:var(--text2); font-family:inherit; font-size:13px; font-weight:500; line-height:1.4; transition:all .18s; display:flex; flex-direction:column; gap:4px; }
+.sug-icon { font-size:18px; } .sug-text { font-size:12px; color:var(--text3); }
+.sug:active { transform:scale(.97); background:var(--border2); border-color:rgba(212,168,83,0.2); }
+
+/* ══ FREE LIMIT BANNER ══ */
+.limit-banner { display:none; align-items:center; gap:10px; padding:10px 16px; background:rgba(229,97,90,0.07); border-bottom:1px solid rgba(229,97,90,0.15); font-size:12px; color:var(--red); flex-shrink:0; }
+.limit-banner.show { display:flex; }
+.limit-banner-text { flex:1; line-height:1.4; }
+.limit-upgrade-btn { background:var(--red); color:#fff; border:none; border-radius:7px; padding:5px 12px; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all .15s; }
+.limit-upgrade-btn:active { transform:scale(.96); }
+
+/* ══ MESSAGES ══ */
+.date-sep { display:flex; align-items:center; gap:12px; color:var(--text3); font-size:11px; font-family:'IBM Plex Mono',monospace; letter-spacing:.05em; margin:12px 0 4px; }
+.date-sep::before,.date-sep::after { content:''; flex:1; height:1px; background:var(--border); }
+.msg { display:flex; gap:10px; animation:msgIn .25s ease-out; padding:2px 0; }
+@keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.msg.user { flex-direction:row-reverse; }
+.msg-avatar { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; align-self:flex-end; margin-bottom:2px; }
+.msg.user .msg-avatar { background:rgba(255,255,255,0.08); border:1px solid var(--border2); }
+.msg.ai .msg-avatar { background:linear-gradient(145deg,#221C10,#181410); border:1px solid rgba(212,168,83,0.2); }
+.msg-body { max-width:80%; display:flex; flex-direction:column; gap:4px; }
+.msg.user .msg-body { align-items:flex-end; }
+.msg-bubble { padding:11px 15px; border-radius:var(--radius); font-size:15px; line-height:1.6; word-wrap:break-word; position:relative; }
+.msg.user .msg-bubble { background:var(--user-bg); border:1px solid var(--user-border); border-bottom-right-radius:5px; }
+.msg.ai .msg-bubble { background:var(--ai-bg); border:1px solid var(--ai-border); border-bottom-left-radius:5px; }
+.msg-bubble code { font-family:'IBM Plex Mono',monospace; font-size:12.5px; background:rgba(0,0,0,0.35); padding:1px 5px; border-radius:4px; color:var(--accent2); }
+.msg-bubble strong { color:var(--accent2); font-weight:600; }
+.msg-bubble a { color:var(--accent2); text-underline-offset:3px; }
+.msg-meta { font-size:10px; color:var(--text3); font-family:'IBM Plex Mono',monospace; padding:0 4px; }
+/* Copy button */
+.msg-copy-btn { display:flex; align-items:center; gap:4px; background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--text3); font-family:'IBM Plex Mono',monospace; font-size:10px; padding:3px 8px; cursor:pointer; margin-top:4px; transition:all .15s; }
+.msg-copy-btn:hover { background:var(--bg3); color:var(--text2); border-color:var(--border2); }
+.msg-copy-btn.copied { color:var(--green); border-color:rgba(92,184,145,0.3); }
+.msg-copy-btn svg { width:10px; height:10px; }
+/* Neural chips */
+.neural-chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.chip { display:flex; align-items:center; gap:5px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text3); background:rgba(0,0,0,0.3); border:1px solid var(--border); padding:3px 8px; border-radius:6px; }
+.chip-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+.msg-error { background:rgba(229,97,90,0.07); border:1px solid rgba(229,97,90,0.2); border-radius:var(--radius); padding:11px 15px; font-size:14px; color:var(--red); max-width:80%; margin-left:40px; }
+.thinking-bubble { display:flex; align-items:center; gap:12px; padding:13px 16px; background:var(--ai-bg); border:1px solid var(--ai-border); border-radius:var(--radius); border-bottom-left-radius:5px; font-size:13px; color:var(--text2); max-width:200px; }
+.thinking-bar { display:flex; gap:4px; }
+.thinking-bar span { width:5px; height:5px; border-radius:50%; background:var(--accent); animation:orb 1.4s ease-in-out infinite; }
+.thinking-bar span:nth-child(2){animation-delay:.2s} .thinking-bar span:nth-child(3){animation-delay:.4s}
+.elapsed { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--accent); opacity:.7; }
+
+/* ══ INPUT AREA ══ */
+.input-zone { flex-shrink:0; padding:12px 14px 12px; background:rgba(12,12,14,0.92); backdrop-filter:blur(24px); border-top:1px solid var(--border); }
+.input-row { display:flex; align-items:flex-end; gap:8px; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-lg); padding:6px 6px 6px 14px; transition:border-color .2s; }
+.input-row:focus-within { border-color:rgba(212,168,83,0.3); box-shadow:0 0 0 3px rgba(212,168,83,0.06); }
+.input-row textarea { flex:1; background:transparent; border:none; outline:none; resize:none; font-family:inherit; font-size:15px; color:var(--text); line-height:1.5; padding:7px 0; max-height:140px; overflow-y:auto; }
+.input-row textarea::placeholder { color:var(--text3); }
+.input-row textarea::-webkit-scrollbar { width:0; }
+.send-btn { width:40px; height:40px; border-radius:var(--radius); background:var(--accent); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; flex-shrink:0; }
+.send-btn svg { width:18px; height:18px; fill:#0C0C0E; transform:translateX(1px); }
+.send-btn:active { transform:scale(.93); }
+.send-btn:disabled { background:var(--bg3); cursor:not-allowed; }
+.send-btn:disabled svg { fill:var(--text3); }
+.hint { text-align:center; font-size:11px; color:var(--text3); font-family:'IBM Plex Mono',monospace; margin-top:8px; min-height:14px; }
+
+/* ══ STATS PANEL ══ */
+.stats-panel { flex:1; overflow-y:auto; padding:16px; gap:0; }
+.stats-panel::-webkit-scrollbar { width:3px; }
+.section-label { font-size:10px; font-family:'IBM Plex Mono',monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--text3); margin:16px 0 8px; }
+.section-label:first-child { margin-top:0; }
+.stat-row { display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--border); }
+.stat-row:last-child { border-bottom:none; }
+.stat-label { font-size:14px; color:var(--text2); }
+.stat-val { font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500; color:var(--accent2); }
+.pbar { height:3px; background:var(--border); border-radius:10px; overflow:hidden; margin-top:2px; }
+.pbar-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:10px; transition:width .6s ease; box-shadow:0 0 8px rgba(212,168,83,0.4); }
+.llm-card { display:flex; align-items:center; gap:12px; padding:13px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); }
+.llm-card.live { border-color:rgba(92,184,145,0.25); background:rgba(92,184,145,0.04); }
+.llm-card-dot { width:9px; height:9px; border-radius:50%; background:var(--text3); flex-shrink:0; }
+.llm-card.live .llm-card-dot { background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse-dot 2s infinite; }
+.llm-card-info h4 { font-size:13px; font-weight:600; }
+.llm-card-info p { font-size:12px; color:var(--text3); margin-top:2px; }
+.busy-notice { display:none; align-items:center; gap:8px; padding:10px 14px; background:var(--accent-bg); border:1px solid rgba(212,168,83,0.15); border-radius:var(--radius); font-size:12px; color:var(--accent); margin-top:12px; }
+.busy-notice.show { display:flex; }
+.stat-refresh-btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:9px 16px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text2); cursor:pointer; margin-top:12px; transition:all .15s; width:100%; }
+.stat-refresh-btn:hover { border-color:var(--border2); color:var(--text); }
+
+/* ══ PROFILE PANEL ══ */
+.profile-panel { flex:1; overflow-y:auto; padding:16px; }
+.profile-panel::-webkit-scrollbar { width:3px; }
+.profile-avatar { width:72px; height:72px; background:linear-gradient(145deg,#2A2318,#1A1710); border:2px solid rgba(212,168,83,0.3); border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 14px; box-shadow:var(--glow); }
+.profile-name { text-align:center; font-size:20px; font-weight:700; margin-bottom:4px; }
+.profile-email { text-align:center; font-size:13px; color:var(--text3); font-family:'IBM Plex Mono',monospace; margin-bottom:20px; }
+.plan-badge { display:flex; align-items:center; gap:8px; padding:12px 16px; border-radius:var(--radius); margin-bottom:16px; }
+.plan-badge.free { background:var(--bg3); border:1px solid var(--border); }
+.plan-badge.premium { background:rgba(212,168,83,0.08); border:1px solid rgba(212,168,83,0.25); }
+.plan-badge.vip { background:linear-gradient(135deg,rgba(212,168,83,0.15),rgba(255,200,50,0.06)); border:1px solid rgba(255,200,50,0.4); box-shadow:0 0 18px rgba(212,168,83,0.12); }
+.plan-badge-icon { font-size:22px; }
+.plan-badge-info h3 { font-size:14px; font-weight:700; }
+.plan-badge-info p { font-size:12px; color:var(--text3); margin-top:2px; }
+.msg-counter { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:16px; }
+.msg-counter-label { font-size:12px; color:var(--text3); font-family:'IBM Plex Mono',monospace; margin-bottom:8px; }
+.msg-counter-bar { height:6px; background:var(--border); border-radius:10px; overflow:hidden; margin-bottom:6px; }
+.msg-counter-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:10px; transition:width .5s; }
+.msg-counter-fill.danger { background:linear-gradient(90deg,var(--red),#ff8080); }
+.msg-counter-text { font-size:12px; color:var(--text2); }
+.profile-section { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; }
+.profile-section-head { padding:12px 16px; font-size:13px; font-weight:600; color:var(--text2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+.profile-section-head svg { width:14px; height:14px; fill:var(--accent); }
+.profile-field { padding:12px 16px; }
+.profile-field label { display:block; font-size:11px; color:var(--text3); margin-bottom:5px; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.05em; }
+.profile-field input { width:100%; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-family:inherit; font-size:14px; color:var(--text); outline:none; transition:border-color .2s; }
+.profile-field input:focus { border-color:rgba(212,168,83,0.35); }
+.profile-save-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:11px; background:var(--accent); border:none; border-radius:var(--radius-sm); font-family:inherit; font-size:14px; font-weight:700; color:#0C0C0E; cursor:pointer; transition:all .15s; margin-top:4px; }
+.profile-save-btn:active { transform:scale(.97); }
+.profile-save-btn:disabled { opacity:.5; cursor:not-allowed; }
+.logout-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:11px; background:transparent; border:1px solid rgba(229,97,90,0.3); border-radius:var(--radius-sm); font-family:inherit; font-size:14px; font-weight:600; color:var(--red); cursor:pointer; transition:all .15s; margin-top:8px; }
+.logout-btn:hover { background:rgba(229,97,90,0.08); }
+.logout-btn:active { transform:scale(.97); }
+
+/* ══ PAYMENT PANEL ══ */
+.payment-panel { flex:1; overflow-y:auto; padding:16px; }
+.payment-panel::-webkit-scrollbar { width:3px; }
+.payment-hero { text-align:center; padding:20px 0 24px; }
+.payment-hero-icon { font-size:48px; margin-bottom:14px; }
+.payment-hero h2 { font-size:22px; font-weight:700; margin-bottom:8px; }
+.payment-hero p { font-size:14px; color:var(--text2); line-height:1.6; max-width:300px; margin:0 auto; }
+.payment-features { display:flex; flex-direction:column; gap:10px; margin-bottom:20px; }
+.payment-feature { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); }
+.payment-feature-icon { font-size:20px; width:32px; text-align:center; flex-shrink:0; }
+.payment-feature-text h4 { font-size:14px; font-weight:600; }
+.payment-feature-text p { font-size:12px; color:var(--text3); margin-top:2px; }
+.payment-price { text-align:center; padding:16px; background:var(--accent-bg); border:1px solid rgba(212,168,83,0.2); border-radius:var(--radius); margin-bottom:16px; }
+.payment-price .price-amount { font-size:36px; font-weight:700; color:var(--accent); font-family:'IBM Plex Mono',monospace; }
+.payment-price .price-period { font-size:14px; color:var(--text3); margin-top:2px; }
+.paypal-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:14px; background:#0070BA; border:none; border-radius:var(--radius-sm); font-family:inherit; font-size:15px; font-weight:700; color:#fff; cursor:pointer; transition:all .15s; margin-bottom:12px; }
+.paypal-btn:hover { background:#005ea6; }
+.paypal-btn:active { transform:scale(.97); }
+.paypal-logo { font-size:18px; font-weight:900; letter-spacing:-.03em; font-style:italic; }
+.verify-section { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+.verify-section h4 { font-size:14px; font-weight:600; margin-bottom:12px; }
+.verify-field { margin-bottom:10px; }
+.verify-field label { display:block; font-size:11px; color:var(--text3); font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+.verify-field input { width:100%; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-family:inherit; font-size:14px; color:var(--text); outline:none; transition:border-color .2s; }
+.verify-field input:focus { border-color:rgba(212,168,83,0.35); }
+.verify-btn { width:100%; padding:11px; background:var(--accent); border:none; border-radius:var(--radius-sm); font-family:inherit; font-size:14px; font-weight:700; color:#0C0C0E; cursor:pointer; transition:all .15s; }
+.verify-btn:active { transform:scale(.97); }
+.verify-btn:disabled { opacity:.5; cursor:not-allowed; }
+.payment-success { display:none; text-align:center; padding:24px; background:rgba(92,184,145,0.06); border:1px solid rgba(92,184,145,0.2); border-radius:var(--radius); margin-bottom:12px; }
+.payment-success.show { display:block; }
+.payment-success .success-icon { font-size:40px; margin-bottom:10px; }
+.payment-success h3 { font-size:16px; font-weight:700; color:var(--green); margin-bottom:6px; }
+.payment-success p { font-size:13px; color:var(--text2); }
+.payment-msg { font-size:12px; text-align:center; color:var(--text3); padding:8px; }
+
+/* ══ OLLAMA BANNERS ══ */
+.ollama-banner { display:none; align-items:center; justify-content:space-between; gap:10px; padding:9px 16px; background:rgba(92,184,145,0.06); border-bottom:1px solid rgba(92,184,145,0.15); font-size:12px; color:var(--green); font-family:'IBM Plex Mono',monospace; flex-shrink:0; animation:fadeUp .3s ease-out; }
+.ollama-banner.show { display:flex; }
+.ollama-banner-left { display:flex; align-items:center; gap:8px; }
+.ollama-banner-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse-dot 2s infinite; flex-shrink:0; }
+.ollama-banner-btn { background:none; border:none; color:var(--green); cursor:pointer; font-size:11px; font-family:'IBM Plex Mono',monospace; text-decoration:underline; padding:0; opacity:.8; }
+.ollama-offline-banner { display:none; align-items:center; justify-content:space-between; gap:10px; padding:9px 16px; background:rgba(212,168,83,0.05); border-bottom:1px solid rgba(212,168,83,0.1); font-size:12px; color:var(--text3); font-family:'IBM Plex Mono',monospace; flex-shrink:0; }
+.ollama-offline-banner.show { display:flex; }
+.ollama-offline-btn { background:none; border:1px solid rgba(212,168,83,0.25); color:var(--accent); cursor:pointer; font-size:11px; font-family:'IBM Plex Mono',monospace; padding:4px 10px; border-radius:6px; white-space:nowrap; }
+
+/* ══ DRAWER ══ */
+.drawer-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:90; opacity:0; pointer-events:none; transition:opacity .3s; }
+.drawer-overlay.show { opacity:1; pointer-events:all; }
+.drawer { position:fixed; bottom:0; left:0; right:0; max-width:720px; margin:0 auto; background:var(--bg2); border:1px solid var(--border2); border-bottom:none; border-radius:var(--radius-lg) var(--radius-lg) 0 0; z-index:100; transform:translateY(100%); transition:transform .35s cubic-bezier(.32,.72,0,1); max-height:65vh; overflow:hidden; display:flex; flex-direction:column; }
+.drawer.open { transform:translateY(0); }
+.drawer-handle { width:36px; height:4px; background:var(--border2); border-radius:2px; margin:12px auto 0; flex-shrink:0; }
+.drawer-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px 12px; flex-shrink:0; }
+.drawer-title { font-size:15px; font-weight:600; }
+.drawer-body { overflow-y:auto; padding:0 18px 24px; flex:1; }
+.drawer-body::-webkit-scrollbar { width:0; }
+
+/* ══ HISTORY SIDEBAR ══ */
+.hist-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); backdrop-filter:blur(4px); z-index:200; opacity:0; pointer-events:none; transition:opacity .3s; }
+.hist-overlay.show { opacity:1; pointer-events:all; }
+.hist-sidebar { position:fixed; top:0; left:-100%; width:min(320px,90vw); height:100%; background:var(--bg2); border-right:1px solid var(--border2); z-index:201; transition:left .35s cubic-bezier(.32,.72,0,1); display:flex; flex-direction:column; padding-top:env(safe-area-inset-top,0px); }
+.hist-sidebar.open { left:0; }
+.hist-head { display:flex; align-items:center; justify-content:space-between; padding:14px 14px 8px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.hist-title { font-size:14px; font-weight:700; display:flex; align-items:center; gap:7px; }
+.hist-del-all { padding:4px 8px; font-size:11px; font-family:'IBM Plex Mono',monospace; background:transparent; border:1px solid var(--border); border-radius:7px; color:var(--text3); cursor:pointer; transition:all .15s; }
+.hist-del-all:hover { background:rgba(229,97,90,.1); border-color:rgba(229,97,90,.3); color:var(--red); }
+.hist-search-wrap { position:relative; padding:10px 12px 6px; flex-shrink:0; }
+.hist-search { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:9px; padding:8px 12px 8px 32px; color:var(--text); font-family:inherit; font-size:13px; outline:none; transition:border-color .2s; }
 .hist-search::placeholder { color:var(--text3); }
 .hist-search:focus { border-color:rgba(212,168,83,.3); }
-
-.hist-list {
-  flex:1; overflow-y:auto;
-  overflow-x:hidden;
-  padding:4px 8px 20px;
-}
+.hist-list { flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 8px 20px; }
 .hist-list::-webkit-scrollbar { width:3px; }
-.hist-list::-webkit-scrollbar-thumb {
-  background:rgba(255,255,255,.07);
-  border-radius:10px;
-}
-
-.hist-group {
-  font-size:10px; font-family:'IBM Plex Mono',monospace;
-  color:var(--text3); letter-spacing:.1em;
-  text-transform:uppercase;
-  padding:10px 6px 3px;
-}
-
-.hist-item {
-  display:flex; align-items:center;
-  gap:8px; padding:9px 8px;
-  border-radius:9px; cursor:pointer;
-  transition:background .15s;
-  margin-bottom:1px;
-  border:1px solid transparent;
-}
+.hist-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,.07); border-radius:10px; }
+.hist-group { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--text3); letter-spacing:.1em; text-transform:uppercase; padding:10px 6px 3px; }
+.hist-item { display:flex; align-items:center; gap:8px; padding:9px 8px; border-radius:9px; cursor:pointer; transition:background .15s; margin-bottom:1px; border:1px solid transparent; }
 .hist-item:hover { background:var(--bg3); }
-.hist-item.active {
-  background:var(--accent-bg);
-  border-color:rgba(212,168,83,.2);
-}
+.hist-item.active { background:var(--accent-bg); border-color:rgba(212,168,83,.2); }
 .hist-item-body { flex:1; min-width:0; }
-.hist-item-title {
-  font-size:13px; font-weight:500;
-  color:var(--text); white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis;
-}
-.hist-item-meta {
-  font-size:11px; color:var(--text3);
-  margin-top:2px; font-family:'IBM Plex Mono',monospace;
-}
-.hist-item-del {
-  width:22px; height:22px;
-  display:flex; align-items:center; justify-content:center;
-  background:transparent; border:none;
-  border-radius:5px; color:var(--text3);
-  cursor:pointer; flex-shrink:0;
-  opacity:0; transition:all .12s;
-}
+.hist-item-title { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hist-item-meta { font-size:11px; color:var(--text3); margin-top:2px; font-family:'IBM Plex Mono',monospace; }
+.hist-item-del { width:22px; height:22px; display:flex; align-items:center; justify-content:center; background:transparent; border:none; border-radius:5px; color:var(--text3); cursor:pointer; flex-shrink:0; opacity:0; transition:all .12s; }
 .hist-item:hover .hist-item-del { opacity:1; }
-.hist-item-del:hover {
-  background:rgba(229,97,90,.15); color:var(--red);
-}
+.hist-item-del:hover { background:rgba(229,97,90,.15); color:var(--red); }
+.hist-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:52px 20px; color:var(--text3); font-size:13px; text-align:center; }
 
-.hist-empty {
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  gap:10px; padding:52px 20px;
-  color:var(--text3); font-size:13px;
-  text-align:center;
-}
-
-/* ═════════════ Confirm modal ════════════ */
-.conf-overlay {
-  position:fixed; inset:0;
-  background:rgba(0,0,0,.65);
-  backdrop-filter:blur(5px);
-  z-index:500;
-  display:flex; align-items:center; justify-content:center;
-  opacity:0; visibility:hidden;
-  transition:opacity .2s,visibility .2s;
-}
+/* ══ CONFIRM MODAL ══ */
+.conf-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(5px); z-index:500; display:flex; align-items:center; justify-content:center; opacity:0; visibility:hidden; transition:opacity .2s,visibility .2s; }
 .conf-overlay.show { opacity:1; visibility:visible; }
-.conf-box {
-  background:#18181E;
-  border:1px solid var(--border2);
-  border-radius:16px;
-  padding:26px 22px;
-  width:min(300px,88vw);
-  text-align:center;
-  animation:scaleIn .18s ease;
-}
-@keyframes scaleIn {
-  from{transform:scale(.92);opacity:0}
-  to{transform:scale(1);opacity:1}
-}
-.conf-box h3 { font-size:15px; font-weight:700; color:var(--text); margin-bottom:7px; }
+.conf-box { background:#18181E; border:1px solid var(--border2); border-radius:16px; padding:26px 22px; width:min(300px,88vw); text-align:center; animation:scaleIn .18s ease; }
+@keyframes scaleIn { from{transform:scale(.92);opacity:0} to{transform:scale(1);opacity:1} }
+.conf-box h3 { font-size:15px; font-weight:700; margin-bottom:7px; }
 .conf-box p  { font-size:13px; color:var(--text2); }
-.conf-cancel {
-  flex:1; padding:10px;
-  background:var(--bg3);
-  border:1px solid var(--border);
-  border-radius:9px; color:var(--text2);
-  font-family:inherit; font-size:13px;
-  cursor:pointer; transition:all .15s;
-}
-.conf-cancel:hover { background:var(--border2); }
-.conf-ok {
-  flex:1; padding:10px;
-  background:rgba(229,97,90,.14);
-  border:1px solid rgba(229,97,90,.3);
-  border-radius:9px; color:var(--red);
-  font-family:inherit; font-size:13px;
-  font-weight:600; cursor:pointer;
-  transition:all .15s;
-}
+.conf-cancel { flex:1; padding:10px; background:var(--bg3); border:1px solid var(--border); border-radius:9px; color:var(--text2); font-family:inherit; font-size:13px; cursor:pointer; transition:all .15s; }
+.conf-ok { flex:1; padding:10px; background:rgba(229,97,90,.14); border:1px solid rgba(229,97,90,.3); border-radius:9px; color:var(--red); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
 .conf-ok:hover { background:rgba(229,97,90,.25); }
+
+/* ══ OLLAMA MODAL ══ */
+.ollama-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(6px); z-index:200; display:none; align-items:flex-end; justify-content:center; }
+.ollama-modal-overlay.show { display:flex; }
+.ollama-modal { background:var(--bg2); border:1px solid var(--border2); border-bottom:none; border-radius:var(--radius-lg) var(--radius-lg) 0 0; width:100%; max-width:720px; max-height:80vh; overflow-y:auto; padding:0 0 32px; animation:slideUp .35s cubic-bezier(.32,.72,0,1); }
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.ollama-modal::-webkit-scrollbar { width:0; }
+.ollama-modal-handle { width:36px; height:4px; background:var(--border2); border-radius:2px; margin:12px auto 0; }
+.ollama-modal-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px 0; }
+.ollama-modal-title { font-size:16px; font-weight:700; }
+.ollama-modal-close { width:30px; height:30px; display:flex; align-items:center; justify-content:center; background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text2); cursor:pointer; font-size:14px; }
+.ollama-modal-body { padding:16px 18px 0; }
+.ollama-modal-body p { font-size:13px; color:var(--text2); line-height:1.65; margin-bottom:16px; }
+.ollama-tabs { display:flex; gap:6px; margin-bottom:16px; }
+.ollama-tab { flex:1; padding:9px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); font-family:inherit; font-size:13px; font-weight:500; color:var(--text2); cursor:pointer; transition:all .15s; text-align:center; }
+.ollama-tab.active { background:var(--accent-bg); border-color:rgba(212,168,83,0.3); color:var(--accent2); }
+.ollama-tab-content { display:none; }
+.ollama-tab-content.active { display:block; }
+.ollama-steps { display:flex; flex-direction:column; gap:12px; }
+.ollama-step { display:flex; gap:12px; align-items:flex-start; }
+.ollama-step-num { width:26px; height:26px; border-radius:50%; background:var(--accent-bg); border:1px solid rgba(212,168,83,0.25); color:var(--accent2); font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px; }
+.ollama-step-info h4 { font-size:13px; font-weight:600; margin-bottom:4px; }
+.ollama-step-info p { font-size:12px; color:var(--text2); margin-bottom:0; line-height:1.5; }
+.ollama-code { background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--accent2); margin-top:6px; white-space:pre; overflow-x:auto; position:relative; }
+.ollama-copy-btn { position:absolute; top:6px; right:6px; background:var(--bg3); border:1px solid var(--border); border-radius:5px; color:var(--text3); font-size:10px; font-family:'IBM Plex Mono',monospace; padding:2px 7px; cursor:pointer; }
+.ollama-note { background:rgba(212,168,83,0.05); border:1px solid rgba(212,168,83,0.12); border-radius:var(--radius-sm); padding:10px 13px; font-size:12px; color:var(--accent); margin-top:16px; line-height:1.6; }
+.ollama-local-card { display:flex; align-items:center; gap:12px; padding:13px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); margin-top:8px; cursor:pointer; transition:all .15s; }
+.ollama-local-card.live { border-color:rgba(92,184,145,0.25); background:rgba(92,184,145,0.04); }
+.ollama-local-dot { width:9px; height:9px; border-radius:50%; background:var(--text3); flex-shrink:0; }
+.ollama-local-card.live .ollama-local-dot { background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse-dot 2s infinite; }
+.ollama-local-info h4 { font-size:13px; font-weight:600; }
+.ollama-local-info p { font-size:12px; color:var(--text3); margin-top:2px; }
+
+/* ══ PWA BANNER ══ */
+.pwa-banner { position:fixed; bottom:0; left:0; right:0; z-index:9000; background:linear-gradient(135deg,#1A1710,#0F0D09); border-top:1px solid rgba(212,168,83,0.25); padding:14px 18px; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px)); display:flex; align-items:center; gap:14px; transform:translateY(100%); transition:transform .4s cubic-bezier(.34,1.2,.64,1); box-shadow:0 -8px 32px rgba(0,0,0,0.5); }
+.pwa-banner.show { transform:translateY(0); }
+.pwa-banner-icon { width:44px; height:44px; border-radius:12px; background:linear-gradient(145deg,#2A2318,#1A1710); border:1px solid rgba(212,168,83,0.3); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:22px; }
+.pwa-banner-text { flex:1; }
+.pwa-banner-text strong { display:block; font-size:13px; font-weight:600; }
+.pwa-banner-text span { font-size:11px; color:var(--text3); }
+.pwa-banner-btns { display:flex; gap:8px; }
+.pwa-install-btn { padding:8px 16px; background:var(--accent); border:none; border-radius:8px; color:#0C0C0E; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all .15s; }
+.pwa-install-btn:active { transform:scale(.96); }
+.pwa-dismiss-btn { padding:8px 10px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text3); font-family:inherit; font-size:12px; cursor:pointer; }
 </style>
 </head>
 <body>
 
-<!-- ═══════════════ PWA INSTALL BANNER ═══════════════ -->
+<!-- ═══ PWA INSTALL BANNER ═══ -->
 <div class="pwa-banner" id="pwa-banner">
   <div class="pwa-banner-icon">🧠</div>
   <div class="pwa-banner-text">
@@ -1674,23 +421,14 @@ body::after {
   </div>
 </div>
 
-<!-- ═══════════ PRELOADER ═══════════ -->
+<!-- ═══ PRELOADER ═══ -->
 <div id="preloader">
-  <!-- Neural scan lines -->
   <div class="pre-neural">
-    <div class="pre-neural-line"></div>
-    <div class="pre-neural-line"></div>
-    <div class="pre-neural-line"></div>
-    <div class="pre-neural-line"></div>
+    <div class="pre-neural-line"></div><div class="pre-neural-line"></div>
+    <div class="pre-neural-line"></div><div class="pre-neural-line"></div>
   </div>
-
-  <!-- Corner accents -->
-  <div class="pre-corner tl"></div>
-  <div class="pre-corner tr"></div>
-  <div class="pre-corner bl"></div>
-  <div class="pre-corner br"></div>
-
-  <!-- Main letters -->
+  <div class="pre-corner tl"></div><div class="pre-corner tr"></div>
+  <div class="pre-corner bl"></div><div class="pre-corner br"></div>
   <div style="position:relative;z-index:2;display:flex;align-items:flex-end;">
     <div class="pre-letters">
       <span class="pre-letter" data-l="N">N</span>
@@ -1701,19 +439,67 @@ body::after {
     </div>
     <div class="pre-ia">
       <span class="pre-ia-letter">I</span>
-      <span class="pre-ia-letter" style="animation-delay:0.95s;">A</span>
+      <span class="pre-ia-letter" style="animation-delay:.95s;">A</span>
     </div>
   </div>
-
   <div class="pre-tagline">Neural Intelligence System</div>
+  <div class="pre-bar-wrap"><div class="pre-bar"></div></div>
+</div>
 
-  <!-- Loading bar -->
-  <div class="pre-bar-wrap">
-    <div class="pre-bar"></div>
+<!-- ═══ AUTH SCREEN ═══ -->
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg>
+      </div>
+      <h1>NEXUS AI</h1>
+      <p>Neural Intelligence System</p>
+    </div>
+    <div class="auth-body">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Ingresar</button>
+        <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Registrarse</button>
+      </div>
+      <div id="auth-error" class="auth-error" style="display:none"></div>
+
+      <!-- Login -->
+      <div id="form-login">
+        <div class="auth-field">
+          <label>Email o usuario</label>
+          <input type="text" id="login-identifier" placeholder="tu@email.com o username" autocomplete="username">
+        </div>
+        <div class="auth-field">
+          <label>Contraseña</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button class="auth-submit" id="login-btn" onclick="doLogin()">Ingresar a NEXUS</button>
+        <div class="auth-hint">¿No tienes cuenta? <span style="color:var(--accent);cursor:pointer" onclick="switchAuthTab('register')">Regístrate gratis</span></div>
+      </div>
+
+      <!-- Register -->
+      <div id="form-register" style="display:none">
+        <div class="auth-field">
+          <label>Nombre de usuario</label>
+          <input type="text" id="reg-username" placeholder="nexus_user" autocomplete="username">
+        </div>
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="tu@email.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label>Contraseña</label>
+          <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        </div>
+        <button class="auth-submit" id="register-btn" onclick="doRegister()">Crear cuenta</button>
+        <div class="auth-hint">¿Ya tienes cuenta? <span style="color:var(--accent);cursor:pointer" onclick="switchAuthTab('login')">Ingresar</span></div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="app">
+<!-- ═══ MAIN APP ═══ -->
+<div class="app" id="main-app" style="display:none">
 
   <!-- Header -->
   <header class="header">
@@ -1723,257 +509,248 @@ body::after {
       </div>
       <div class="brand">
         <div class="brand-name">NEXUS</div>
-        <div class="brand-sub">v4.0 · Neural AI</div>
+        <div class="brand-sub" id="header-sub">Neural AI</div>
       </div>
     </div>
     <div class="header-right">
       <div class="thinking-pill" id="thinking-pill">
-        <div class="thinking-orbs">
-          <span></span><span></span><span></span>
-        </div>
+        <div class="thinking-orbs"><span></span><span></span><span></span></div>
         Pensando
       </div>
       <div class="status-pill" id="status-pill">
         <div class="status-dot" id="status-dot"></div>
         <span id="status-text">...</span>
       </div>
-      <button class="btn-icon" id="history-btn" title="Historial de chats">
+      <button class="btn-icon" id="history-btn" title="Historial">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
       </button>
-      <button class="btn-icon" id="stats-btn" title="Estadísticas">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h2v18H3V3zm4 7h2v11H7V10zm4-4h2v15h-2V6zm4 8h2v7h-2v-7zm4-6h2v13h-2V8z"/></svg>
-      </button>
-      <button class="btn-icon" id="new-btn" title="Nueva conversación">
+      <button class="btn-icon" id="new-btn" title="Nuevo chat">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z"/></svg>
       </button>
     </div>
   </header>
 
-  <!-- Ollama: detectado y activo -->
+  <!-- Ollama banners -->
   <div class="ollama-banner" id="ollama-banner">
-    <div class="ollama-banner-left">
-      <div class="ollama-banner-dot"></div>
-      <span>Ollama local activo — potencia extra disponible</span>
-    </div>
+    <div class="ollama-banner-left"><div class="ollama-banner-dot"></div><span>Ollama local activo</span></div>
     <button class="ollama-banner-btn" onclick="closeOllamaBanner()">✕</button>
   </div>
-
-  <!-- Ollama: no detectado (solo cuando LLM también falla) -->
   <div class="ollama-offline-banner" id="ollama-offline-banner">
     <span>Sin LLM · ¿Querés más poder?</span>
     <button class="ollama-offline-btn" onclick="showOllamaSetup()">Instalar Ollama</button>
   </div>
 
-  <!-- Messages -->
-  <div class="messages" id="messages">
-    <div class="welcome" id="welcome-screen">
-      <div class="welcome-glyph">
-        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg>
+  <!-- Limit banner -->
+  <div class="limit-banner" id="limit-banner">
+    <div class="limit-banner-text" id="limit-banner-text">⚡ Límite diario alcanzado. Se renueva a medianoche. Actualiza a Premium para mensajes ilimitados.</div>
+    <button class="limit-upgrade-btn" onclick="switchMainTab('payment')">Actualizar $10/mes</button>
+  </div>
+
+  <!-- ═══ TAB PANELS ═══ -->
+
+  <!-- CHAT PANEL -->
+  <div class="tab-panel active" id="panel-chat">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome-screen">
+        <div class="welcome-glyph">
+          <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg>
+        </div>
+        <h2>Hola, soy NEXUS</h2>
+        <p>Inteligencia artificial con redes neuronales propias y memoria episódica. Aprendo de cada conversación.</p>
+        <div class="suggestions">
+          <button class="sug" onclick="sendMessage('Hola! ¿Cómo estás hoy?')"><span class="sug-icon">👋</span><span>Salúdame</span><span class="sug-text">Empieza a chatear</span></button>
+          <button class="sug" onclick="sendMessage('¿Cómo funcionas internamente?')"><span class="sug-icon">🔬</span><span>Cómo funciono</span><span class="sug-text">Mi arquitectura neural</span></button>
+          <button class="sug" onclick="sendMessage('¿Quién te creó y cuál es tu historia?')"><span class="sug-icon">👤</span><span>Mi creador</span><span class="sug-text">Historia y origen</span></button>
+          <button class="sug" onclick="sendMessage('¿Qué puedes hacer por mí?')"><span class="sug-icon">⚡</span><span>Capacidades</span><span class="sug-text">Todo lo que puedo hacer</span></button>
+        </div>
       </div>
-      <h2>Hola, soy NEXUS</h2>
-      <p>Inteligencia artificial con redes neuronales propias y memoria episódica. Aprendo de cada conversación.</p>
-      <div class="suggestions">
-        <button class="sug" onclick="sendMessage('Hola! ¿Cómo estás hoy?')">
-          <span class="sug-icon">👋</span>
-          <span>Salúdame</span>
-          <span class="sug-text">Empieza a chatear</span>
-        </button>
-        <button class="sug" onclick="sendMessage('¿Cómo funcionas internamente?')">
-          <span class="sug-icon">🔬</span>
-          <span>Cómo funciono</span>
-          <span class="sug-text">Mi arquitectura neural</span>
-        </button>
-        <button class="sug" onclick="sendMessage('¿Quién te creó y cuál es tu historia?')">
-          <span class="sug-icon">👤</span>
-          <span>Mi creador</span>
-          <span class="sug-text">Historia y origen</span>
-        </button>
-        <button class="sug" onclick="sendMessage('¿Qué puedes hacer por mí?')">
-          <span class="sug-icon">⚡</span>
-          <span>Capacidades</span>
-          <span class="sug-text">Todo lo que puedo hacer</span>
+    </div>
+    <div class="input-zone">
+      <div class="input-row">
+        <textarea id="input" placeholder="Escribe tu mensaje…" rows="1" onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
         </button>
       </div>
+      <div class="hint" id="hint">Nexus está listo</div>
     </div>
   </div>
 
-  <!-- Input area -->
-  <div class="input-zone">
-    <div class="input-row">
-      <textarea id="input" placeholder="Escribe tu mensaje…" rows="1" onkeydown="handleKey(event)"></textarea>
-      <button class="send-btn" id="send-btn" onclick="sendMessage()">
-        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+  <!-- STATS PANEL -->
+  <div class="tab-panel" id="panel-stats">
+    <div class="stats-panel">
+      <div class="busy-notice" id="busy-notice"><span>⏳</span><span>Las estadísticas se actualizarán cuando termine de pensar</span></div>
+      <div class="section-label">Actividad Neural</div>
+      <div class="stat-row"><div class="stat-label">Rank Loss</div><div class="stat-val" id="rank-loss">—</div></div>
+      <div class="pbar"><div class="pbar-fill" id="progress" style="width:0%"></div></div>
+      <div class="stat-row"><div class="stat-label">Intent Loss</div><div class="stat-val" id="intent-loss">—</div></div>
+      <div class="section-label">Memoria</div>
+      <div class="stat-row"><div class="stat-label">Vocabulario</div><div class="stat-val" id="vocab">—</div></div>
+      <div class="stat-row"><div class="stat-label">Episodios</div><div class="stat-val" id="episodes">—</div></div>
+      <div class="stat-row"><div class="stat-label">Entrenamientos</div><div class="stat-val" id="trainings">—</div></div>
+      <div class="stat-row"><div class="stat-label">Consultas totales</div><div class="stat-val" id="queries">—</div></div>
+      <div class="section-label">Motor de Lenguaje</div>
+      <div class="llm-card" id="llm-card">
+        <div class="llm-card-dot"></div>
+        <div class="llm-card-info"><h4 id="llm-name">—</h4><p id="llm-status">Verificando...</p></div>
+      </div>
+      <div class="section-label">Ollama Local</div>
+      <div class="ollama-local-card" id="ollama-local-card" onclick="showOllamaSetup()">
+        <div class="ollama-local-dot" id="ollama-local-dot"></div>
+        <div class="ollama-local-info"><h4 id="ollama-local-name">Verificando...</h4><p id="ollama-local-status">Toca para ver instrucciones</p></div>
+      </div>
+      <div class="section-label">Base de Datos</div>
+      <div class="stat-row"><div class="stat-label">Usuarios</div><div class="stat-val" id="db-users">—</div></div>
+      <div class="stat-row"><div class="stat-label">Mensajes guardados</div><div class="stat-val" id="db-messages">—</div></div>
+      <button class="stat-refresh-btn" onclick="loadStats(true)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        Actualizar estadísticas
       </button>
     </div>
-    <div class="hint" id="hint">Nexus está listo</div>
   </div>
 
-</div>
+  <!-- PROFILE PANEL -->
+  <div class="tab-panel" id="panel-profile">
+    <div class="profile-panel">
+      <div class="profile-avatar" id="profile-avatar">🧠</div>
+      <div class="profile-name" id="profile-display-name">—</div>
+      <div class="profile-email" id="profile-email-display">—</div>
 
-<!-- Stats drawer backdrop -->
-<div class="drawer-overlay" id="drawer-overlay" onclick="closeStats()"></div>
+      <div class="plan-badge" id="plan-badge">
+        <div class="plan-badge-icon" id="plan-icon">🆓</div>
+        <div class="plan-badge-info">
+          <h3 id="plan-name">Plan Gratuito</h3>
+          <p id="plan-desc">10 mensajes disponibles</p>
+          <p id="plan-expiry" style="font-size:11px;margin-top:2px;display:none"></p>
+        </div>
+      </div>
 
-<!-- Stats drawer -->
-<div class="drawer" id="stats-drawer">
-  <div class="drawer-handle"></div>
-  <div class="drawer-head">
-    <div class="drawer-title">Sistema Neural</div>
-    <button class="btn-icon" onclick="closeStats()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      <div class="msg-counter" id="msg-counter">
+        <div class="msg-counter-label">Mensajes usados hoy <span id="counter-reset-time" style="color:var(--text3);font-size:10px"></span></div>
+        <div class="msg-counter-bar"><div class="msg-counter-fill" id="counter-fill" style="width:0%"></div></div>
+        <div class="msg-counter-text" id="counter-text">0 / 10 mensajes</div>
+      </div>
+
+      <!-- Edit profile -->
+      <div class="profile-section">
+        <div class="profile-section-head">
+          <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          Editar Perfil
+        </div>
+        <div class="profile-field">
+          <label>Nombre visible</label>
+          <input type="text" id="edit-display-name" placeholder="Tu nombre">
+        </div>
+        <div class="profile-field">
+          <label>Nombre de usuario</label>
+          <input type="text" id="edit-username" placeholder="username">
+        </div>
+        <div style="padding:0 16px 14px">
+          <div id="profile-msg" style="display:none;font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;"></div>
+          <button class="profile-save-btn" id="profile-save-btn" onclick="saveProfile()">Guardar cambios</button>
+        </div>
+      </div>
+
+      <!-- Logout -->
+      <button class="logout-btn" onclick="doLogout()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+        Cerrar sesión
+      </button>
+    </div>
+  </div>
+
+  <!-- PAYMENT PANEL -->
+  <div class="tab-panel" id="panel-payment">
+    <div class="payment-panel">
+
+      <!-- Already premium -->
+      <div id="payment-already-premium" style="display:none;text-align:center;padding:32px 20px">
+        <div style="font-size:56px;margin-bottom:16px" id="premium-icon">✨</div>
+        <h2 style="font-size:22px;font-weight:700;margin-bottom:8px" id="premium-title">¡Ya eres Premium!</h2>
+        <p style="font-size:14px;color:var(--text2);line-height:1.6" id="premium-desc">Tienes acceso ilimitado a NEXUS AI. Disfruta la experiencia completa.</p>
+        <div id="plan-expiry-info" style="margin-top:16px;font-size:13px;color:var(--text3)"></div>
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:rgba(212,168,83,0.1);border:1px solid rgba(212,168,83,0.25);border-radius:99px;margin-top:16px;font-size:13px;color:var(--accent)" id="premium-badge-line">
+          <span>⚡</span> Plan Premium Activo
+        </div>
+      </div>
+
+      <!-- Payment form -->
+      <div id="payment-form-area">
+        <div class="payment-hero">
+          <div class="payment-hero-icon">⚡</div>
+          <h2>Plan Premium</h2>
+          <p>Desbloquea NEXUS sin límites. Mensajes ilimitados, acceso total a la IA neural.</p>
+        </div>
+
+        <div class="payment-features">
+          <div class="payment-feature"><div class="payment-feature-icon">♾️</div><div class="payment-feature-text"><h4>Mensajes ilimitados</h4><p>Sin restricciones de uso diario o mensual</p></div></div>
+          <div class="payment-feature"><div class="payment-feature-icon">🧠</div><div class="payment-feature-text"><h4>IA Neural completa</h4><p>Acceso a todas las capacidades de aprendizaje</p></div></div>
+          <div class="payment-feature"><div class="payment-feature-icon">💾</div><div class="payment-feature-text"><h4>Historial persistente</h4><p>Todas tus conversaciones guardadas en la nube</p></div></div>
+          <div class="payment-feature"><div class="payment-feature-icon">🚀</div><div class="payment-feature-text"><h4>Prioridad máxima</h4><p>Respuestas más rápidas y sin interrupciones</p></div></div>
+        </div>
+
+        <div class="payment-price">
+          <div class="price-amount">$10.00</div>
+          <div class="price-period">USD · Renovación mensual automática</div>
+        </div>
+
+        <div style="background:rgba(212,168,83,0.05);border:1px solid rgba(212,168,83,0.15);border-radius:12px;padding:12px 14px;margin:0 16px 16px;font-size:12px;color:var(--text2);line-height:1.6">
+          ⚠️ <strong style="color:var(--accent)">¿Cómo funciona?</strong> Paga $10 al mes vía PayPal. Cada mes verificamos tu pago manualmente — si está activo, sigues con ilimitado; si no, el plan vuelve a gratuito (10 mensajes/día).
+        </div>
+
+        <button class="paypal-btn" onclick="openPayPal()">
+          <span class="paypal-logo">Pay</span><span class="paypal-logo" style="color:#009CDE">Pal</span>
+          <span>Pagar $10/mes con PayPal</span>
+        </button>
+        <div class="payment-msg">🔒 Pago seguro procesado por PayPal</div>
+
+        <div class="payment-success" id="payment-success">
+          <div class="success-icon">🎉</div>
+          <h3>¡Plan Premium activado!</h3>
+          <p id="payment-success-msg">Tienes acceso ilimitado por 30 días. Renueva el próximo mes para continuar.</p>
+        </div>
+
+        <div class="verify-section">
+          <h4>¿Ya realizaste el pago?</h4>
+          <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Ingresa el ID de transacción de PayPal para verificar tu pago mensual y activar el plan.</p>
+          <div class="verify-field">
+            <label>ID de Transacción PayPal</label>
+            <input type="text" id="transaction-id" placeholder="ej: 7AL68312YU652781A" style="text-transform:uppercase">
+          </div>
+          <div class="verify-field">
+            <label>Email PayPal del pagador</label>
+            <input type="email" id="payer-email" placeholder="tu@paypal.com">
+          </div>
+          <div id="verify-msg" style="display:none;font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;"></div>
+          <button class="verify-btn" id="verify-btn" onclick="verifyPayment()">Verificar y Activar Premium</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="bottom-nav-btn active" id="nav-chat" onclick="switchMainTab('chat')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+      Chat
     </button>
-  </div>
-  <div class="drawer-body">
-    <!-- Busy notice inside drawer -->
-    <div class="busy-notice" id="busy-notice">
-      <span>⏳</span>
-      <span>Las estadísticas se actualizarán cuando termine de pensar</span>
-    </div>
+    <button class="bottom-nav-btn" id="nav-stats" onclick="switchMainTab('stats')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h2v18H3V3zm4 7h2v11H7V10zm4-4h2v15h-2V6zm4 8h2v7h-2v-7zm4-6h2v13h-2V8z"/></svg>
+      Neural
+    </button>
+    <button class="bottom-nav-btn" id="nav-payment" onclick="switchMainTab('payment')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>
+      Premium
+    </button>
+    <button class="bottom-nav-btn" id="nav-profile" onclick="switchMainTab('profile')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      Perfil
+    </button>
+  </nav>
 
-    <div class="section-label">Actividad Neural</div>
-    <div class="stat-row">
-      <div class="stat-label">Rank Loss</div>
-      <div class="stat-val" id="rank-loss">—</div>
-    </div>
-    <div class="pbar"><div class="pbar-fill" id="progress" style="width:0%"></div></div>
-    <div class="stat-row">
-      <div class="stat-label">Intent Loss</div>
-      <div class="stat-val" id="intent-loss">—</div>
-    </div>
+</div><!-- /app -->
 
-    <div class="section-label">Memoria</div>
-    <div class="stat-row">
-      <div class="stat-label">Vocabulario</div>
-      <div class="stat-val" id="vocab">—</div>
-    </div>
-    <div class="stat-row">
-      <div class="stat-label">Episodios</div>
-      <div class="stat-val" id="episodes">—</div>
-    </div>
-    <div class="stat-row">
-      <div class="stat-label">Entrenamientos</div>
-      <div class="stat-val" id="trainings">—</div>
-    </div>
-    <div class="stat-row">
-      <div class="stat-label">Consultas totales</div>
-      <div class="stat-val" id="queries">—</div>
-    </div>
-
-    <div class="section-label">Motor de Lenguaje</div>
-    <div class="llm-card" id="llm-card">
-      <div class="llm-card-dot"></div>
-      <div class="llm-card-info">
-        <h4 id="llm-name">—</h4>
-        <p id="llm-status">Verificando...</p>
-      </div>
-    </div>
-
-    <div class="section-label">Ollama Local</div>
-    <div class="ollama-local-card" id="ollama-local-card" onclick="showOllamaSetup()">
-      <div class="ollama-local-dot" id="ollama-local-dot"></div>
-      <div class="ollama-local-info">
-        <h4 id="ollama-local-name">Verificando...</h4>
-        <p id="ollama-local-status">Toca para ver instrucciones</p>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     OLLAMA SETUP MODAL
-════════════════════════════════════════════════════════════ -->
-<div class="ollama-modal-overlay" id="ollama-modal-overlay" onclick="handleOllamaOverlayClick(event)">
-  <div class="ollama-modal" id="ollama-modal">
-    <div class="ollama-modal-handle"></div>
-    <div class="ollama-modal-head">
-      <div class="ollama-modal-title">⚡ Activar Ollama local</div>
-      <button class="ollama-modal-close" onclick="closeOllamaSetup()">✕</button>
-    </div>
-    <div class="ollama-modal-body">
-      <p>Con Ollama corriendo en tu dispositivo, NEXUS tiene un motor de lenguaje local de respaldo cuando Groq no está disponible. Son solo 3 comandos.</p>
-
-      <div class="ollama-tabs">
-        <button class="ollama-tab active" onclick="switchOllamaTab('android', this)">📱 Android (Termux)</button>
-        <button class="ollama-tab" onclick="switchOllamaTab('pc', this)">🖥️ PC / Mac</button>
-      </div>
-
-      <!-- Android tab -->
-      <div class="ollama-tab-content active" id="tab-android">
-        <div class="ollama-steps">
-          <div class="ollama-step">
-            <div class="ollama-step-num">1</div>
-            <div class="ollama-step-info">
-              <h4>Instalar Termux (si no lo tenés)</h4>
-              <p>Descargalo desde F-Droid o desde tu tienda de apps. Luego abrilo.</p>
-            </div>
-          </div>
-          <div class="ollama-step">
-            <div class="ollama-step-num">2</div>
-            <div class="ollama-step-info">
-              <h4>Instalar y arrancar Ollama</h4>
-              <p>Copiá y pegá estos comandos en Termux, uno por uno:</p>
-              <div class="ollama-code">pkg install ollama<button class="ollama-copy-btn" onclick="copyCode('pkg install ollama')">copiar</button></div>
-              <div class="ollama-code" style="margin-top:6px">OLLAMA_ORIGINS="*" ollama serve<button class="ollama-copy-btn" onclick="copyCode('OLLAMA_ORIGINS=&quot;*&quot; ollama serve')">copiar</button></div>
-            </div>
-          </div>
-          <div class="ollama-step">
-            <div class="ollama-step-num">3</div>
-            <div class="ollama-step-info">
-              <h4>Descargar el modelo (en otra ventana de Termux)</h4>
-              <p>Abrí una nueva sesión de Termux (deslizá desde el borde izquierdo) y ejecutá:</p>
-              <div class="ollama-code">ollama pull llama3.2:1b<button class="ollama-copy-btn" onclick="copyCode('ollama pull llama3.2:1b')">copiar</button></div>
-            </div>
-          </div>
-          <div class="ollama-step">
-            <div class="ollama-step-num">4</div>
-            <div class="ollama-step-info">
-              <h4>Volvé a esta página y recargala</h4>
-              <p>NEXUS va a detectar Ollama automáticamente y verás el indicador verde.</p>
-            </div>
-          </div>
-        </div>
-        <div class="ollama-note">
-          ⚠️ El <strong>OLLAMA_ORIGINS="*"</strong> en el paso 2 es clave: permite que la página web se comunique con Ollama. Sin esto no funciona.
-        </div>
-      </div>
-
-      <!-- PC tab -->
-      <div class="ollama-tab-content" id="tab-pc">
-        <div class="ollama-steps">
-          <div class="ollama-step">
-            <div class="ollama-step-num">1</div>
-            <div class="ollama-step-info">
-              <h4>Descargá e instalá Ollama</h4>
-              <p>Entrá a <strong>ollama.com</strong>, descargá el instalador y seguí los pasos (siguiente, siguiente, instalar).</p>
-            </div>
-          </div>
-          <div class="ollama-step">
-            <div class="ollama-step-num">2</div>
-            <div class="ollama-step-info">
-              <h4>Descargá el modelo</h4>
-              <div class="ollama-code">ollama pull llama3.2:1b<button class="ollama-copy-btn" onclick="copyCode('ollama pull llama3.2:1b')">copiar</button></div>
-              <p style="margin-top:8px">Iniciá Ollama con CORS habilitado:</p>
-              <div class="ollama-code">OLLAMA_ORIGINS="*" ollama serve<button class="ollama-copy-btn" onclick="copyCode('OLLAMA_ORIGINS=&quot;*&quot; ollama serve')">copiar</button></div>
-              <p style="margin-top:8px;font-size:11px;color:var(--text3)">Windows PowerShell: $env:OLLAMA_ORIGINS="*"; ollama serve</p>
-            </div>
-          </div>
-          <div class="ollama-step">
-            <div class="ollama-step-num">3</div>
-            <div class="ollama-step-info">
-              <h4>Recargá esta página</h4>
-              <p>NEXUS detecta Ollama automáticamente. El indicador verde confirma que está activo.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     HISTORY SIDEBAR
-════════════════════════════════════════════════════════════ -->
+<!-- ═══ HISTORY SIDEBAR ═══ -->
 <div class="hist-overlay" id="hist-overlay" onclick="closeHistory()"></div>
 <div class="hist-sidebar" id="hist-sidebar">
   <div class="hist-head">
@@ -1997,10 +774,10 @@ body::after {
   <div class="hist-list" id="hist-list"></div>
 </div>
 
-<!-- Confirm dialog -->
+<!-- ═══ CONFIRM DIALOG ═══ -->
 <div class="conf-overlay" id="conf-overlay">
   <div class="conf-box">
-    <div style="font-size:28px;margin-bottom:10px" id="conf-icon">🗑️</div>
+    <div style="font-size:28px;margin-bottom:10px">🗑️</div>
     <h3 id="conf-title">¿Borrar historial?</h3>
     <p id="conf-desc">Esta acción no se puede deshacer.</p>
     <div style="display:flex;gap:10px;margin-top:20px">
@@ -2010,137 +787,465 @@ body::after {
   </div>
 </div>
 
+<!-- ═══ OLLAMA MODAL ═══ -->
+<div class="ollama-modal-overlay" id="ollama-modal-overlay" onclick="handleOllamaOverlayClick(event)">
+  <div class="ollama-modal" id="ollama-modal">
+    <div class="ollama-modal-handle"></div>
+    <div class="ollama-modal-head">
+      <div class="ollama-modal-title">⚡ Activar Ollama local</div>
+      <button class="ollama-modal-close" onclick="closeOllamaSetup()">✕</button>
+    </div>
+    <div class="ollama-modal-body">
+      <p>Con Ollama en tu dispositivo, NEXUS tiene motor de lenguaje local de respaldo cuando Groq no está disponible.</p>
+      <div class="ollama-tabs">
+        <button class="ollama-tab active" onclick="switchOllamaTab('android',this)">📱 Android (Termux)</button>
+        <button class="ollama-tab" onclick="switchOllamaTab('pc',this)">🖥️ PC / Mac</button>
+      </div>
+      <div class="ollama-tab-content active" id="tab-android">
+        <div class="ollama-steps">
+          <div class="ollama-step"><div class="ollama-step-num">1</div><div class="ollama-step-info"><h4>Instalar Termux</h4><p>Descargalo desde F-Droid o tu tienda de apps.</p></div></div>
+          <div class="ollama-step"><div class="ollama-step-num">2</div><div class="ollama-step-info"><h4>Instalar y arrancar Ollama</h4><p>Copia y pega en Termux:</p><div class="ollama-code">pkg install ollama<button class="ollama-copy-btn" onclick="copyCode('pkg install ollama')">copiar</button></div><div class="ollama-code" style="margin-top:6px">OLLAMA_ORIGINS="*" ollama serve<button class="ollama-copy-btn" onclick="copyCode('OLLAMA_ORIGINS=&quot;*&quot; ollama serve')">copiar</button></div></div></div>
+          <div class="ollama-step"><div class="ollama-step-num">3</div><div class="ollama-step-info"><h4>Descargar modelo</h4><div class="ollama-code">ollama pull llama3.2:1b<button class="ollama-copy-btn" onclick="copyCode('ollama pull llama3.2:1b')">copiar</button></div></div></div>
+          <div class="ollama-step"><div class="ollama-step-num">4</div><div class="ollama-step-info"><h4>Recarga esta página</h4><p>NEXUS detectará Ollama automáticamente.</p></div></div>
+        </div>
+        <div class="ollama-note">⚠️ El <strong>OLLAMA_ORIGINS="*"</strong> es clave para permitir comunicación con la web.</div>
+      </div>
+      <div class="ollama-tab-content" id="tab-pc">
+        <div class="ollama-steps">
+          <div class="ollama-step"><div class="ollama-step-num">1</div><div class="ollama-step-info"><h4>Descarga Ollama</h4><p>Entra a <strong>ollama.com</strong> e instala.</p></div></div>
+          <div class="ollama-step"><div class="ollama-step-num">2</div><div class="ollama-step-info"><h4>Descargar modelo e iniciar</h4><div class="ollama-code">ollama pull llama3.2:1b<button class="ollama-copy-btn" onclick="copyCode('ollama pull llama3.2:1b')">copiar</button></div><div class="ollama-code" style="margin-top:6px">OLLAMA_ORIGINS="*" ollama serve<button class="ollama-copy-btn" onclick="copyCode('OLLAMA_ORIGINS=&quot;*&quot; ollama serve')">copiar</button></div></div></div>
+          <div class="ollama-step"><div class="ollama-step-num">3</div><div class="ollama-step-info"><h4>Recarga la página</h4><p>NEXUS detecta Ollama automáticamente.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ESTADO GLOBAL
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  PRELOADER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 (function() {
   const preloader = document.getElementById('preloader');
   if (!preloader) return;
   const letters = document.querySelectorAll('.pre-letter');
-
-  // Add floating particles
   for (let i = 0; i < 20; i++) {
     const p = document.createElement('div');
     p.className = 'pre-particle';
-    const x = Math.random() * 100;
-    const y = Math.random() * 100;
-    const tx = (Math.random() - 0.5) * 300;
-    const ty = (Math.random() - 0.5) * 300;
-    const dur = 1.5 + Math.random() * 2;
-    const delay = Math.random() * 1.5;
-    p.style.cssText = `left:${x}%;top:${y}%;--tx:${tx}px;--ty:${ty}px;animation-duration:${dur}s;animation-delay:${delay}s;`;
+    const x=Math.random()*100, y=Math.random()*100;
+    const tx=(Math.random()-.5)*300, ty=(Math.random()-.5)*300;
+    const dur=1.5+Math.random()*2, delay=Math.random()*1.5;
+    p.style.cssText=`left:${x}%;top:${y}%;--tx:${tx}px;--ty:${ty}px;animation-duration:${dur}s;animation-delay:${delay}s;`;
     preloader.appendChild(p);
   }
-
-  // Pressure compression effect on letters sequentially
   letters.forEach((letter, i) => {
-    setTimeout(() => {
-      letter.style.animation = 'none';
-      letter.offsetHeight; // reflow
-      letter.classList.add('compress');
-    }, 700 + i * 80);
+    setTimeout(() => { letter.style.animation='none'; letter.offsetHeight; letter.classList.add('compress'); }, 700 + i * 80);
   });
-
-  // Hide after 2.3s
-  setTimeout(() => {
-    preloader.classList.add('hide');
-    setTimeout(() => preloader.remove(), 700);
-  }, 2300);
+  setTimeout(() => { preloader.classList.add('hide'); setTimeout(() => preloader.remove(), 700); }, 2300);
 })();
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  AUTH STATE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let authToken = localStorage.getItem('nexus_token') || null;
+let currentUser = null;
+let currentPlan = 'free';
+let currentPlanStatus = {};
+let messagesUsed = 0;
+let messagesLimit = 10;
+let resetsAt = null;
+
+function getAuthHeaders() {
+  return authToken ? { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
+async function initApp() {
+  if (!authToken) { showAuth(); return; }
+  try {
+    const res = await fetch('/api/auth/me', { headers: getAuthHeaders() });
+    if (!res.ok) { authToken = null; localStorage.removeItem('nexus_token'); showAuth(); return; }
+    const data = await res.json();
+    currentUser     = data.user;
+    currentPlan     = data.plan?.plan || 'free';
+    currentPlanStatus = data.plan || {};
+    messagesUsed    = data.messagesUsed || 0;
+    messagesLimit   = data.messagesLimit || 10;
+    resetsAt        = data.resetsAt || null;
+    showApp();
+  } catch (e) {
+    showAuth();
+  }
+}
+
+function showAuth() {
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('main-app').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('main-app').style.display = 'flex';
+  updateProfileUI();
+  updateHeaderSub();
+  updateLimitBanner();
+  loadStats();
+  startPolling();
+  detectOllama();
+  setTimeout(() => fixHeight(), 100);
+  document.getElementById('input')?.focus();
+}
+
+function updateHeaderSub() {
+  const sub = document.getElementById('header-sub');
+  if (!sub) return;
+  if (currentUser?.isVip) sub.textContent = '👑 VIP';
+  else if (currentPlan === 'premium') sub.textContent = '✨ Premium';
+  else sub.textContent = 'v7.0 · Free';
+}
+
+function updateProfileUI() {
+  if (!currentUser) return;
+  const initial = currentUser.username?.[0]?.toUpperCase() || '🧠';
+  document.getElementById('profile-avatar').textContent = currentUser.isVip ? '👑' : initial;
+  document.getElementById('profile-display-name').textContent = currentUser.displayName || currentUser.username;
+  document.getElementById('profile-email-display').textContent = currentUser.email;
+  document.getElementById('edit-display-name').value = currentUser.displayName || '';
+  document.getElementById('edit-username').value = currentUser.username || '';
+
+  const badge   = document.getElementById('plan-badge');
+  const icon    = document.getElementById('plan-icon');
+  const pname   = document.getElementById('plan-name');
+  const pdesc   = document.getElementById('plan-desc');
+  const pexpiry = document.getElementById('plan-expiry');
+  const msgCounter = document.getElementById('msg-counter');
+  const planObj = currentPlanStatus || {};
+
+  const isPremium = (currentPlan === 'premium');
+  const isVip     = currentUser.isVip || planObj.isVip;
+
+  if (isPremium) {
+    badge.className = isVip ? 'plan-badge vip' : 'plan-badge premium';
+    icon.textContent  = isVip ? '👑' : '⚡';
+    pname.textContent = isVip ? 'VIP — Cuenta del Creador' : 'Plan Premium';
+    pdesc.textContent = isVip ? 'Acceso permanente sin cobro' : 'Mensajes ilimitados · Acceso total';
+    pexpiry.style.display = 'none';
+    if (!isVip && planObj.expiresAt) {
+      const exp = new Date(planObj.expiresAt);
+      pexpiry.textContent = `Renueva el ${exp.toLocaleDateString('es',{day:'numeric',month:'long',year:'numeric'})}`;
+      pexpiry.style.display = 'block';
+      pexpiry.style.color = 'rgba(212,168,83,0.7)';
+    }
+    msgCounter.style.display = 'none';
+  } else {
+    badge.className = 'plan-badge free';
+    icon.textContent  = '🆓';
+    pname.textContent = 'Plan Gratuito';
+    const remaining = Math.max(0, messagesLimit - messagesUsed);
+    pdesc.textContent = `${remaining} mensajes restantes hoy`;
+    pexpiry.style.display = 'none';
+
+    if (planObj.expired) {
+      pexpiry.textContent = '⚠ Plan expirado — renueva para continuar';
+      pexpiry.style.display = 'block';
+      pexpiry.style.color = 'var(--red)';
+    }
+
+    msgCounter.style.display = 'block';
+    const pct  = Math.min(100, (messagesUsed / messagesLimit) * 100);
+    const fill = document.getElementById('counter-fill');
+    fill.style.width = pct + '%';
+    fill.className = 'msg-counter-fill' + (pct >= 80 ? ' danger' : '');
+    document.getElementById('counter-text').textContent = `${messagesUsed} / ${messagesLimit} mensajes hoy`;
+
+    // Mostrar hora de reset
+    const resetEl = document.getElementById('counter-reset-time');
+    if (resetEl && resetsAt) {
+      const r = new Date(resetsAt);
+      resetEl.textContent = `· reset a las ${r.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}`;
+    }
+  }
+
+  // Payment panel
+  const alreadyPremium = document.getElementById('payment-already-premium');
+  const paymentForm = document.getElementById('payment-form-area');
+  if (isPremium) {
+    alreadyPremium.style.display = 'block';
+    paymentForm.style.display    = 'none';
+    // Update premium panel
+    document.getElementById('premium-icon').textContent  = isVip ? '👑' : '✨';
+    document.getElementById('premium-title').textContent = isVip ? '¡Cuenta VIP del Creador!' : '¡Ya eres Premium!';
+    document.getElementById('premium-desc').textContent  = isVip
+      ? 'Esta cuenta tiene acceso permanente sin cobro. Siempre premium.'
+      : 'Tienes acceso ilimitado a NEXUS AI. Disfruta la experiencia completa.';
+    const expiryInfo = document.getElementById('plan-expiry-info');
+    if (isVip) {
+      expiryInfo.innerHTML = '<span style="color:var(--accent)">♾️ Sin fecha de vencimiento</span>';
+    } else if (planObj.expiresAt) {
+      const exp = new Date(planObj.expiresAt);
+      const daysLeft = Math.ceil((exp - new Date()) / (1000 * 60 * 60 * 24));
+      expiryInfo.innerHTML = `<span style="color:${daysLeft <= 5 ? 'var(--red)' : 'var(--text3)'}">📅 Vence el ${exp.toLocaleDateString('es',{day:'numeric',month:'long',year:'numeric'})} (${daysLeft} día${daysLeft!==1?'s':''})</span>`;
+      if (daysLeft <= 5) {
+        document.getElementById('premium-badge-line').innerHTML = `<span>⚠️</span> Renueva en ${daysLeft} día${daysLeft!==1?'s':''} — $10 USD`;
+        document.getElementById('premium-badge-line').style.borderColor = 'rgba(229,97,90,0.3)';
+        document.getElementById('premium-badge-line').style.background  = 'rgba(229,97,90,0.08)';
+        document.getElementById('premium-badge-line').style.color       = 'var(--red)';
+        // Show renew form anyway
+        alreadyPremium.style.display = 'block';
+        paymentForm.style.display    = 'block';
+      }
+    } else {
+      expiryInfo.innerHTML = '';
+    }
+  } else {
+    alreadyPremium.style.display = 'none';
+    paymentForm.style.display    = 'block';
+  }
+}
+
+function updateLimitBanner() {
+  const banner = document.getElementById('limit-banner');
+  if (currentPlan === 'free' && messagesUsed >= messagesLimit) {
+    banner.classList.add('show');
+    if (resetsAt) {
+      const r = new Date(resetsAt);
+      document.getElementById('limit-banner-text').textContent = `⚡ Límite de ${messagesLimit} mensajes diarios alcanzado. Se renueva a las ${r.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}. Actualiza a Premium para ilimitado.`;
+    }
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  AUTH ACTIONS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').className = 'auth-tab' + (tab==='login'?' active':'');
+  document.getElementById('tab-register').className = 'auth-tab' + (tab==='register'?' active':'');
+  document.getElementById('form-login').style.display = tab==='login' ? 'block' : 'none';
+  document.getElementById('form-register').style.display = tab==='register' ? 'block' : 'none';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function doLogin() {
+  const identifier = document.getElementById('login-identifier').value.trim();
+  const password   = document.getElementById('login-password').value;
+  if (!identifier || !password) { showAuthError('Completa todos los campos'); return; }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+  try {
+    const res = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier, password }) });
+    const data = await res.json();
+    if (!res.ok) { showAuthError(data.error || 'Error al ingresar'); btn.disabled=false; btn.textContent='Ingresar a NEXUS'; return; }
+    authToken = data.token;
+    currentUser = data.user;
+    currentPlan = data.plan?.plan || data.plan || 'free';
+    currentPlanStatus = data.plan || {};
+    messagesUsed  = data.messagesUsed || 0;
+    messagesLimit = data.messagesLimit || 10;
+    localStorage.setItem('nexus_token', authToken);
+    await initApp();
+  } catch (e) {
+    showAuthError('Error de conexión'); btn.disabled=false; btn.textContent='Ingresar a NEXUS';
+  }
+}
+
+async function doRegister() {
+  const username = document.getElementById('reg-username').value.trim();
+  const email    = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if (!username || !email || !password) { showAuthError('Completa todos los campos'); return; }
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true; btn.textContent = 'Registrando...';
+  try {
+    const res = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, email, password }) });
+    const data = await res.json();
+    if (!res.ok) { showAuthError(data.error || 'Error al registrarse'); btn.disabled=false; btn.textContent='Crear cuenta'; return; }
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('nexus_token', authToken);
+    await initApp();
+  } catch (e) {
+    showAuthError('Error de conexión'); btn.disabled=false; btn.textContent='Crear cuenta';
+  }
+}
+
+function doLogout() {
+  authToken = null; currentUser = null;
+  localStorage.removeItem('nexus_token');
+  conversationId = null; hActiveId = null; hMsgs = [];
+  showAuth();
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  PROFILE SAVE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function saveProfile() {
+  const displayName = document.getElementById('edit-display-name').value.trim();
+  const username    = document.getElementById('edit-username').value.trim();
+  const btn = document.getElementById('profile-save-btn');
+  const msgEl = document.getElementById('profile-msg');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  msgEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/auth/profile', { method:'PATCH', headers: getAuthHeaders(), body: JSON.stringify({ displayName, username }) });
+    const data = await res.json();
+    if (!res.ok) {
+      msgEl.style.cssText = 'display:block;background:rgba(229,97,90,0.1);color:var(--red);border:1px solid rgba(229,97,90,0.2);font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;';
+      msgEl.textContent = data.error || 'Error al guardar';
+    } else {
+      authToken = data.token;
+      currentUser = data.user;
+      localStorage.setItem('nexus_token', authToken);
+      msgEl.style.cssText = 'display:block;background:rgba(92,184,145,0.08);color:var(--green);border:1px solid rgba(92,184,145,0.2);font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;';
+      msgEl.textContent = '✓ Perfil actualizado';
+      updateProfileUI();
+      updateHeaderSub();
+    }
+  } catch (e) {
+    msgEl.style.cssText = 'display:block;background:rgba(229,97,90,0.1);color:var(--red);border:1px solid rgba(229,97,90,0.2);font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;';
+    msgEl.textContent = 'Error de conexión';
+  }
+  btn.disabled = false; btn.textContent = 'Guardar cambios';
+  setTimeout(() => { msgEl.style.display='none'; }, 3000);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  PAYMENT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let paypalTarget = null;
+
+async function loadPaymentInfo() {
+  try {
+    const res = await fetch('/api/payment/info', { headers: getAuthHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    paypalTarget = data.paypalTarget; // base64 encoded
+  } catch (e) {}
+}
+
+function openPayPal() {
+  if (!paypalTarget) return;
+  const email = atob(paypalTarget);
+  const url = `https://www.paypal.com/paypalme/${email.split('@')[0].replace(/[^a-zA-Z0-9]/g,'')}`;
+  // Fallback — redirect to PayPal send money
+  const fallback = `https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${encodeURIComponent(email)}&item_name=NEXUS+AI+Premium+Mensual&amount=10.00&currency_code=USD`;
+  window.open(fallback, '_blank');
+}
+
+async function verifyPayment() {
+  const transactionId = document.getElementById('transaction-id').value.trim().toUpperCase();
+  const payerEmail    = document.getElementById('payer-email').value.trim();
+  if (!transactionId) { showVerifyMsg('Ingresa el ID de transacción de PayPal', 'error'); return; }
+
+  const btn = document.getElementById('verify-btn');
+  btn.disabled = true; btn.textContent = 'Verificando...';
+
+  try {
+    const res = await fetch('/api/payment/verify', { method:'POST', headers: getAuthHeaders(), body: JSON.stringify({ transactionId, payerEmail, amount: 10 }) });
+    const data = await res.json();
+    if (!res.ok) {
+      showVerifyMsg(data.error || 'Error al verificar', 'error');
+      btn.disabled = false; btn.textContent = 'Verificar y Activar Premium';
+      return;
+    }
+    // Success
+    currentPlan = 'premium';
+    currentPlanStatus = { plan:'premium', active:true, isVip: data.isVip||false, expiresAt: data.expiresAt||null };
+    messagesUsed = 0;
+    document.getElementById('payment-success').classList.add('show');
+    document.getElementById('payment-success-msg').textContent = data.message || '¡Plan activado! Acceso ilimitado por 30 días.';
+    showVerifyMsg('✓ ' + (data.message || '¡Premium activado!'), 'success');
+    updateProfileUI();
+    updateHeaderSub();
+    updateLimitBanner();
+    btn.textContent = '✓ Activado';
+  } catch (e) {
+    showVerifyMsg('Error de conexión', 'error');
+    btn.disabled = false; btn.textContent = 'Verificar y Activar Premium';
+  }
+}
+
+function showVerifyMsg(msg, type) {
+  const el = document.getElementById('verify-msg');
+  el.style.cssText = type === 'success'
+    ? 'display:block;background:rgba(92,184,145,0.08);color:var(--green);border:1px solid rgba(92,184,145,0.2);font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;'
+    : 'display:block;background:rgba(229,97,90,0.08);color:var(--red);border:1px solid rgba(229,97,90,0.2);font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;';
+  el.textContent = msg;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  MAIN TABS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function switchMainTab(tab) {
+  ['chat','stats','payment','profile'].forEach(t => {
+    document.getElementById(`panel-${t}`).classList.remove('active');
+    document.getElementById(`nav-${t}`).classList.remove('active');
+  });
+  document.getElementById(`panel-${tab}`).classList.add('active');
+  document.getElementById(`nav-${tab}`).classList.add('active');
+
+  if (tab === 'stats') loadStats();
+  if (tab === 'profile') updateProfileUI();
+  if (tab === 'payment') loadPaymentInfo();
+  if (tab === 'chat') setTimeout(() => document.getElementById('input')?.focus(), 100);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  GLOBAL STATE (CHAT)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 let busy = false;
 let conversationId = null;
 let thinkingTimer = null;
 let thinkingSeconds = 0;
 let statsLoaded = false;
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  HISTORIAL DE CHATS — localStorage
-//  Guarda texto plano para retomar con contexto real
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const H_INDEX = 'nxh_index';   // lista de chats [{id,title,ts,count}]
-const H_MSG   = 'nxh_m_';      // mensajes de cada chat: [{role,text,ts}]
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  HISTORY (localStorage)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const H_INDEX = 'nxh_index';
+const H_MSG   = 'nxh_m_';
+let hActiveId = null;
+let hMsgs     = [];
 
-let hActiveId    = null;  // id del chat activo
-let hMsgs        = [];    // mensajes del chat activo en memoria [{role,text}]
-let hConfirmFn   = null;  // acción pendiente en confirm
-
-// ── helpers ─────────────────────────────────────
 function hUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-
-function hGetIndex() {
-  try { return JSON.parse(localStorage.getItem(H_INDEX)||'[]'); } catch { return []; }
-}
+function hGetIndex() { try { return JSON.parse(localStorage.getItem(H_INDEX)||'[]'); } catch { return []; } }
 function hSetIndex(list) { localStorage.setItem(H_INDEX, JSON.stringify(list)); }
+function hGetMsgs(id)   { try { return JSON.parse(localStorage.getItem(H_MSG+id)||'[]'); } catch { return []; } }
+function hSetMsgs(id,msgs) { localStorage.setItem(H_MSG+id, JSON.stringify(msgs)); }
+function hDelMsgs(id)   { localStorage.removeItem(H_MSG+id); }
+function hTitle(text)   { const t=text.trim().replace(/\s+/g,' '); return t.length>44?t.slice(0,44)+'…':t||'Nuevo chat'; }
+function hRelTime(ts)   { const s=Math.floor((Date.now()-ts)/1000); if(s<60)return'ahora'; const m=Math.floor(s/60); if(m<60)return`hace ${m} min`; const h=Math.floor(m/60); if(h<24)return`hace ${h}h`; const d=Math.floor(h/24); if(d===1)return'ayer'; if(d<7)return`hace ${d} días`; return new Date(ts).toLocaleDateString('es',{day:'numeric',month:'short'}); }
+function hEsc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function hGetMsgs(id) {
-  try { return JSON.parse(localStorage.getItem(H_MSG+id)||'[]'); } catch { return []; }
-}
-function hSetMsgs(id, msgs) { localStorage.setItem(H_MSG+id, JSON.stringify(msgs)); }
-function hDelMsgs(id) { localStorage.removeItem(H_MSG+id); }
-
-function hTitle(text) {
-  const t = text.trim().replace(/\s+/g,' ');
-  return t.length > 44 ? t.slice(0,44)+'…' : t || 'Nuevo chat';
-}
-
-function hRelTime(ts) {
-  const s = Math.floor((Date.now()-ts)/1000);
-  if (s < 60)  return 'ahora';
-  const m = Math.floor(s/60);
-  if (m < 60)  return `hace ${m} min`;
-  const h = Math.floor(m/60);
-  if (h < 24)  return `hace ${h}h`;
-  const d = Math.floor(h/24);
-  if (d === 1) return 'ayer';
-  if (d < 7)   return `hace ${d} días`;
-  return new Date(ts).toLocaleDateString('es',{day:'numeric',month:'short'});
-}
-
-function hEsc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ── Guardar mensaje en historial ─────────────────
-// Llamar después de addMessage para guardar texto plano
 function hPush(role, text) {
   if (!hActiveId) {
-    // Primer mensaje → crear chat nuevo
-    hActiveId = hUid();
-    hMsgs = [];
+    hActiveId = hUid(); hMsgs = [];
     const idx = hGetIndex();
     idx.unshift({ id: hActiveId, title: hTitle(role==='user'?text:'Chat'), ts: Date.now(), count: 0 });
     hSetIndex(idx);
   }
   hMsgs.push({ role, text, ts: Date.now() });
-  // Actualizar index
   const idx = hGetIndex();
   const i = idx.findIndex(c=>c.id===hActiveId);
-  if (i!==-1) {
-    idx[i].count = hMsgs.length;
-    idx[i].ts = Date.now();
-    if (role==='user' && hMsgs.filter(m=>m.role==='user').length===1) {
-      idx[i].title = hTitle(text); // título = primer msg usuario
-    }
-    // Mover al tope
-    const [e] = idx.splice(i,1);
-    idx.unshift(e);
-    hSetIndex(idx);
+  if (i !== -1) {
+    idx[i].count = hMsgs.length; idx[i].ts = Date.now();
+    if (role==='user' && hMsgs.filter(m=>m.role==='user').length===1) idx[i].title = hTitle(text);
+    const [e] = idx.splice(i,1); idx.unshift(e); hSetIndex(idx);
   }
   hSetMsgs(hActiveId, hMsgs);
   renderHistory();
 }
 
-// Historial en formato que el servidor entiende (últimos 10 turnos)
 function hGetServerHistory() {
   return hMsgs.slice(-10).map(m=>({ role: m.role==='user'?'user':'assistant', content: m.text }));
 }
 
-// ── Sidebar open/close ───────────────────────────
 function openHistory() {
   document.getElementById('hist-sidebar').classList.add('open');
   document.getElementById('hist-overlay').classList.add('show');
@@ -2153,119 +1258,67 @@ function closeHistory() {
   document.getElementById('hist-overlay').classList.remove('show');
   document.getElementById('history-btn').classList.remove('active');
 }
-
 document.getElementById('history-btn').addEventListener('click', () => {
   document.getElementById('hist-sidebar').classList.contains('open') ? closeHistory() : openHistory();
 });
 
-// ── Renderizar lista ─────────────────────────────
 function renderHistory(query='') {
   const list = hGetIndex();
-  const q    = query.toLowerCase();
+  const q = query.toLowerCase();
   const filtered = q ? list.filter(c=>c.title.toLowerCase().includes(q)) : list;
   const el = document.getElementById('hist-list');
   el.innerHTML = '';
-
-  if (filtered.length===0) {
-    el.innerHTML = `<div class="hist-empty">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="rgba(255,255,255,0.1)"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-      <span>${q ? 'Sin resultados' : 'Aún no hay chats'}</span>
-    </div>`;
-    return;
-  }
-
-  // Agrupar por día
-  const now   = Date.now();
-  const tod   = new Date(); tod.setHours(0,0,0,0);
-  const wk    = new Date(tod); wk.setDate(tod.getDate()-6);
-  const mo    = new Date(tod); mo.setDate(tod.getDate()-30);
-  const groups = [
-    { label:'Hoy',         items:[] },
-    { label:'Esta semana', items:[] },
-    { label:'Este mes',    items:[] },
-    { label:'Anterior',    items:[] },
-  ];
-  filtered.forEach(c=>{
-    const d = new Date(c.ts); d.setHours(0,0,0,0);
-    if (d>=tod)     groups[0].items.push(c);
-    else if (d>=wk) groups[1].items.push(c);
-    else if (d>=mo) groups[2].items.push(c);
-    else            groups[3].items.push(c);
-  });
-
+  if (filtered.length===0) { el.innerHTML=`<div class="hist-empty"><svg width="30" height="30" viewBox="0 0 24 24" fill="rgba(255,255,255,0.1)"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg><span>${q?'Sin resultados':'Aún no hay chats'}</span></div>`; return; }
+  const now=Date.now(), tod=new Date(); tod.setHours(0,0,0,0);
+  const wk=new Date(tod); wk.setDate(tod.getDate()-6);
+  const mo=new Date(tod); mo.setDate(tod.getDate()-30);
+  const groups=[{label:'Hoy',items:[]},{label:'Esta semana',items:[]},{label:'Este mes',items:[]},{label:'Anterior',items:[]}];
+  filtered.forEach(c=>{ const d=new Date(c.ts); d.setHours(0,0,0,0); if(d>=tod)groups[0].items.push(c); else if(d>=wk)groups[1].items.push(c); else if(d>=mo)groups[2].items.push(c); else groups[3].items.push(c); });
   groups.forEach(({label,items})=>{
-    if (!items.length) return;
-    const gl = document.createElement('div');
-    gl.className = 'hist-group';
-    gl.textContent = label;
-    el.appendChild(gl);
+    if(!items.length) return;
+    const gl=document.createElement('div'); gl.className='hist-group'; gl.textContent=label; el.appendChild(gl);
     items.forEach(c=>{
-      const item = document.createElement('div');
-      item.className = 'hist-item' + (c.id===hActiveId?' active':'');
-      item.innerHTML = `
-        <div class="hist-item-body">
-          <div class="hist-item-title">${hEsc(c.title)}</div>
-          <div class="hist-item-meta">${hRelTime(c.ts)} · ${c.count||0} mensajes</div>
-        </div>
-        <button class="hist-item-del" title="Eliminar">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-        </button>`;
-      item.querySelector('.hist-item-del').addEventListener('click', e=>{
-        e.stopPropagation();
-        confirmDeleteChat(c.id, c.title);
-      });
+      const item=document.createElement('div');
+      item.className='hist-item'+(c.id===hActiveId?' active':'');
+      item.innerHTML=`<div class="hist-item-body"><div class="hist-item-title">${hEsc(c.title)}</div><div class="hist-item-meta">${hRelTime(c.ts)} · ${c.count||0} mensajes</div></div><button class="hist-item-del" title="Eliminar"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>`;
+      item.querySelector('.hist-item-del').addEventListener('click', e=>{ e.stopPropagation(); confirmDeleteChat(c.id, c.title); });
       item.addEventListener('click', ()=> loadChat(c.id));
       el.appendChild(item);
     });
   });
 }
 
-// ── Cargar chat ──────────────────────────────────
 function loadChat(id) {
   const msgs = hGetMsgs(id);
   const idx  = hGetIndex();
   const meta = idx.find(c=>c.id===id);
   if (!meta || !msgs.length) return;
-
-  // Restaurar estado
-  hActiveId = id;
-  hMsgs     = msgs;
-  conversationId = null; // el server generará un convId nuevo, pero recibirá el historial
-
-  // Limpiar pantalla
+  hActiveId = id; hMsgs = msgs; conversationId = null;
   const msgsEl = document.getElementById('messages');
   msgsEl.innerHTML = '';
-
-  // Renderizar mensajes guardados
   msgs.forEach(m=>{
     const wrap = document.createElement('div');
     if (m.role==='user') {
-      wrap.className = 'msg user';
-      wrap.innerHTML = `<div class="msg-avatar">🧑</div>
-        <div class="msg-body"><div class="msg-bubble">${renderMd(m.text)}</div></div>`;
+      wrap.className='msg user';
+      wrap.innerHTML=`<div class="msg-avatar">🧑</div><div class="msg-body"><div class="msg-bubble">${renderMd(m.text)}</div></div>`;
     } else {
-      wrap.className = 'msg ai';
-      wrap.innerHTML = `<div class="msg-avatar">🧠</div>
-        <div class="msg-body"><div class="msg-bubble">${renderMd(m.text)}</div></div>`;
+      wrap.className='msg ai';
+      const bubble = document.createElement('div'); bubble.className='msg-bubble'; bubble.innerHTML=renderMd(m.text);
+      const copyBtn = makeCopyBtn(m.text);
+      const body = document.createElement('div'); body.className='msg-body';
+      body.appendChild(bubble); body.appendChild(copyBtn);
+      wrap.innerHTML='<div class="msg-avatar">🧠</div>';
+      wrap.appendChild(body);
     }
     msgsEl.appendChild(wrap);
   });
   msgsEl.scrollTop = msgsEl.scrollHeight;
-
-  closeHistory();
-  renderHistory();
-
-  // Hint indicando que es un chat retomado
-  document.getElementById('hint').textContent = `Chat retomado · ${msgs.length} mensajes cargados`;
+  closeHistory(); renderHistory();
+  document.getElementById('hint').textContent = `Chat retomado · ${msgs.length} mensajes`;
 }
 
-// ── Confirm / Delete ─────────────────────────────
-function confirmDeleteChat(id, title) {
-  showConfirm('¿Eliminar este chat?', `"${title.slice(0,38)}"`, ()=>deleteChat(id));
-}
-function confirmClearAll() {
-  showConfirm('¿Borrar todo el historial?', 'Se eliminarán todos los chats. No se puede deshacer.', clearAllHistory);
-}
+function confirmDeleteChat(id, title) { showConfirm('¿Eliminar este chat?', `"${title.slice(0,38)}"`, ()=>deleteChat(id)); }
+function confirmClearAll() { showConfirm('¿Borrar todo el historial?', 'Se eliminarán todos los chats. No se puede deshacer.', clearAllHistory); }
 function showConfirm(title, desc, fn) {
   document.getElementById('conf-title').textContent = title;
   document.getElementById('conf-desc').textContent  = desc;
@@ -2273,587 +1326,409 @@ function showConfirm(title, desc, fn) {
   document.getElementById('conf-overlay').classList.add('show');
 }
 function closeConfirm() { document.getElementById('conf-overlay').classList.remove('show'); }
-
 function deleteChat(id) {
-  const idx = hGetIndex().filter(c=>c.id!==id);
-  hSetIndex(idx);
-  hDelMsgs(id);
-  if (hActiveId===id) {
-    hActiveId=null; hMsgs=[];
-    conversationId=null;
-    document.getElementById('new-btn').click();
-  }
+  const idx = hGetIndex().filter(c=>c.id!==id); hSetIndex(idx); hDelMsgs(id);
+  if (hActiveId===id) { hActiveId=null; hMsgs=[]; conversationId=null; document.getElementById('new-btn').click(); }
   renderHistory(document.getElementById('hist-search').value);
 }
 function clearAllHistory() {
-  hGetIndex().forEach(c=>hDelMsgs(c.id));
-  hSetIndex([]);
-  hActiveId=null; hMsgs=[];
-  conversationId=null;
-  renderHistory();
-  document.getElementById('new-btn').click();
+  hGetIndex().forEach(c=>hDelMsgs(c.id)); hSetIndex([]); hActiveId=null; hMsgs=[]; conversationId=null;
+  renderHistory(); document.getElementById('new-btn').click();
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  OLLAMA LOCAL — detección y uso desde el frontend
-//  Cuando Groq falla, el browser llama directo a
-//  localhost:11434 (mismo dispositivo del usuario)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const OLLAMA_URL    = 'http://localhost:11434';
-const OLLAMA_MODEL  = 'llama3.2:1b';
-let   ollamaAvailable = false;
-let   ollamaBannerDismissed = false;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  OLLAMA LOCAL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const OLLAMA_URL   = 'http://localhost:11434';
+const OLLAMA_MODEL = 'llama3.2:1b';
+let ollamaAvailable = false;
+let ollamaBannerDismissed = false;
 
 async function detectOllama() {
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const timer = setTimeout(()=>ctrl.abort(), 2500);
     const r = await fetch(OLLAMA_URL, { signal: ctrl.signal, mode: 'cors' });
     clearTimeout(timer);
     ollamaAvailable = r.ok || r.status === 200;
-  } catch (e) {
-    ollamaAvailable = false;
-  }
+  } catch (e) { ollamaAvailable = false; }
   updateOllamaUI();
   return ollamaAvailable;
 }
 
 function updateOllamaUI() {
-  // Drawer card
-  const card   = document.getElementById('ollama-local-card');
-  const dot    = document.getElementById('ollama-local-dot');
-  const name   = document.getElementById('ollama-local-name');
-  const status = document.getElementById('ollama-local-status');
-
+  const card=document.getElementById('ollama-local-card');
+  const dot=document.getElementById('ollama-local-dot');
+  const name=document.getElementById('ollama-local-name');
+  const status=document.getElementById('ollama-local-status');
   if (ollamaAvailable) {
-    card.classList.add('live');
-    dot.style.background  = 'var(--green)';
-    dot.style.boxShadow   = '0 0 8px var(--green)';
-    name.textContent      = 'Ollama local activo';
-    status.textContent    = `Modelo: ${OLLAMA_MODEL}`;
-
-    // Banner verde (si no fue cerrado por el user)
-    if (!ollamaBannerDismissed) {
-      document.getElementById('ollama-banner').classList.add('show');
-    }
+    card.classList.add('live'); dot.style.background='var(--green)'; dot.style.boxShadow='0 0 8px var(--green)';
+    name.textContent='Ollama local activo'; status.textContent=`Modelo: ${OLLAMA_MODEL}`;
+    if (!ollamaBannerDismissed) document.getElementById('ollama-banner').classList.add('show');
     document.getElementById('ollama-offline-banner').classList.remove('show');
   } else {
-    card.classList.remove('live');
-    dot.style.background  = 'var(--text3)';
-    dot.style.boxShadow   = 'none';
-    name.textContent      = 'Ollama no detectado';
-    status.textContent    = 'Toca para ver cómo instalarlo';
+    card.classList.remove('live'); dot.style.background='var(--text3)'; dot.style.boxShadow='none';
+    name.textContent='Ollama no detectado'; status.textContent='Toca para ver cómo instalarlo';
     document.getElementById('ollama-banner').classList.remove('show');
   }
 }
 
-function closeOllamaBanner() {
-  ollamaBannerDismissed = true;
-  document.getElementById('ollama-banner').classList.remove('show');
-}
+function closeOllamaBanner() { ollamaBannerDismissed=true; document.getElementById('ollama-banner').classList.remove('show'); }
+function showOfflineBanner() { if (!ollamaAvailable && !ollamaBannerDismissed) document.getElementById('ollama-offline-banner').classList.add('show'); }
 
-function showOfflineBanner() {
-  if (!ollamaAvailable && !ollamaBannerDismissed) {
-    document.getElementById('ollama-offline-banner').classList.add('show');
-  }
-}
-
-// Llama a Ollama DIRECTAMENTE desde el browser (sin pasar por Render)
-async function callOllamaLocal(message, history = []) {
+async function callOllamaLocal(message, history=[]) {
   if (!ollamaAvailable) return null;
   try {
-    const messages = [
-      { role: 'system', content: 'Eres NEXUS, un asistente de inteligencia artificial creado por Jhonatan David Castro Galvis. Responde en español de forma concisa y útil.' },
-      ...history.slice(-6).map(h => ({ role: h.role, content: h.content })),
-      { role: 'user', content: message }
+    const messages=[
+      {role:'system',content:'Eres NEXUS, un asistente de inteligencia artificial creado por Jhonatan David Castro Galvis. Responde en español de forma concisa y útil.'},
+      ...history.slice(-6).map(h=>({role:h.role,content:h.content})),
+      {role:'user',content:message}
     ];
-
-    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false }),
-    });
-
+    const r = await fetch(`${OLLAMA_URL}/api/chat`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({model:OLLAMA_MODEL,messages,stream:false}) });
     if (!r.ok) throw new Error(`Ollama HTTP ${r.status}`);
     const data = await r.json();
     return data?.message?.content || null;
-  } catch (e) {
-    console.warn('[Ollama local] falló:', e.message);
-    ollamaAvailable = false;
-    updateOllamaUI();
-    return null;
-  }
+  } catch (e) { ollamaAvailable=false; updateOllamaUI(); return null; }
 }
 
-// Modal helpers
-function showOllamaSetup() {
-  document.getElementById('ollama-modal-overlay').classList.add('show');
-}
-
-function closeOllamaSetup() {
-  document.getElementById('ollama-modal-overlay').classList.remove('show');
-}
-
-function handleOllamaOverlayClick(e) {
-  if (e.target === document.getElementById('ollama-modal-overlay')) {
-    closeOllamaSetup();
-  }
-}
-
+function showOllamaSetup() { document.getElementById('ollama-modal-overlay').classList.add('show'); }
+function closeOllamaSetup() { document.getElementById('ollama-modal-overlay').classList.remove('show'); }
+function handleOllamaOverlayClick(e) { if (e.target===document.getElementById('ollama-modal-overlay')) closeOllamaSetup(); }
 function switchOllamaTab(tab, btn) {
-  document.querySelectorAll('.ollama-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.ollama-tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ollama-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.ollama-tab-content').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById(`tab-${tab}`).classList.add('active');
 }
+function copyCode(text) { const decoded=text.replace(/&quot;/g,'"').replace(/&amp;/g,'&'); navigator.clipboard?.writeText(decoded).catch(()=>{}); }
 
-function copyCode(text) {
-  const decoded = text.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-  navigator.clipboard?.writeText(decoded).catch(() => {});
-}
-
-// Re-detectar cada 30s mientras la página está abierta
 setInterval(detectOllama, 30000);
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  SMART POLLING — nunca toca el backend mientras busy
-//  Solo un intervalo, pausado cuando Ollama está pensando
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const POLL_INTERVAL = 60000; // 60s — suficiente para stats, sin presionar
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  POLLING
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const POLL_INTERVAL = 60000;
 let pollHandle = null;
-
 function startPolling() {
   if (pollHandle) clearInterval(pollHandle);
-  pollHandle = setInterval(() => {
-    if (!busy) loadStats(false); // silencioso, no fuerza
-  }, POLL_INTERVAL);
+  pollHandle = setInterval(() => { if (!busy) loadStats(false); }, POLL_INTERVAL);
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  TEXTAREA AUTO-RESIZE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const inputEl = document.getElementById('input');
-inputEl.addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 140) + 'px';
-});
-
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+if (inputEl) {
+  inputEl.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  });
 }
+function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  RENDER MARKDOWN BÁSICO
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  RENDER MARKDOWN
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function renderMd(text) {
   return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank">$1</a>')
-    .replace(/\n/g, '<br>');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`(.+?)`/g,'<code>$1</code>')
+    .replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank">$1</a>')
+    .replace(/\n/g,'<br>');
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  AÑADIR MENSAJE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function addMessage(content, role = 'ai', extras = {}) {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  COPY BUTTON
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function makeCopyBtn(text) {
+  const btn = document.createElement('button');
+  btn.className = 'msg-copy-btn';
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copiar`;
+  btn.addEventListener('click', () => {
+    navigator.clipboard?.writeText(text).then(() => {
+      btn.className = 'msg-copy-btn copied';
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg> Copiado`;
+      setTimeout(() => { btn.className='msg-copy-btn'; btn.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copiar`; }, 2000);
+    }).catch(()=>{});
+  });
+  return btn;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ADD MESSAGE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function addMessage(content, role='ai', extras={}) {
   const welcome = document.getElementById('welcome-screen');
   if (welcome) welcome.remove();
-
   const msgs = document.getElementById('messages');
   const wrap = document.createElement('div');
   wrap.className = `msg ${role}`;
 
-  const userEmoji = '🧑';
-  const aiEmoji = '🧠';
-
   if (role === 'user') {
-    wrap.innerHTML = `
-      <div class="msg-avatar">${userEmoji}</div>
-      <div class="msg-body">
-        <div class="msg-bubble">${renderMd(content)}</div>
-      </div>`;
+    wrap.innerHTML = `<div class="msg-avatar">🧑</div><div class="msg-body"><div class="msg-bubble">${renderMd(content)}</div></div>`;
   } else {
     let chipsHtml = '';
     if (extras.neuralActivity) {
       const a = extras.neuralActivity;
       chipsHtml = `<div class="neural-chips">
-        ${a.rank_loss   !== undefined ? `<div class="chip"><div class="chip-dot" style="background:#D4A853"></div>loss ${a.rank_loss.toFixed(4)}</div>` : ''}
-        ${a.vocab_size  !== undefined ? `<div class="chip"><div class="chip-dot" style="background:#5CB891"></div>vocab ${a.vocab_size}</div>` : ''}
-        ${a.episodes    !== undefined ? `<div class="chip"><div class="chip-dot" style="background:#60A5FA"></div>ep ${a.episodes}</div>` : ''}
-        ${a.trainings   !== undefined ? `<div class="chip"><div class="chip-dot" style="background:#A78BFA"></div>train ${a.trainings}</div>` : ''}
+        ${a.rank_loss!==undefined?`<div class="chip"><div class="chip-dot" style="background:#D4A853"></div>loss ${a.rank_loss.toFixed(4)}</div>`:''}
+        ${a.vocab_size!==undefined?`<div class="chip"><div class="chip-dot" style="background:#5CB891"></div>vocab ${a.vocab_size}</div>`:''}
+        ${a.episodes!==undefined?`<div class="chip"><div class="chip-dot" style="background:#60A5FA"></div>ep ${a.episodes}</div>`:''}
+        ${a.trainings!==undefined?`<div class="chip"><div class="chip-dot" style="background:#A78BFA"></div>train ${a.trainings}</div>`:''}
       </div>`;
     }
-    wrap.innerHTML = `
-      <div class="msg-avatar">${aiEmoji}</div>
-      <div class="msg-body">
-        <div class="msg-bubble">${renderMd(content)}${chipsHtml}</div>
-      </div>`;
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.innerHTML = renderMd(content) + chipsHtml;
+    const copyBtn = makeCopyBtn(content);
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    body.appendChild(bubble);
+    body.appendChild(copyBtn);
+    wrap.innerHTML = '<div class="msg-avatar">🧠</div>';
+    wrap.appendChild(body);
   }
 
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
-
-  // ── Guardar en historial (texto plano) ──
-  hPush(role, content);
+  return wrap;
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  THINKING INDICATOR + TIMER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function showThinking() {
-  const welcome = document.getElementById('welcome-screen');
-  if (welcome) welcome.remove();
-
-  const msgs = document.getElementById('messages');
-  const el = document.createElement('div');
-  el.id = 'thinking-msg';
-  el.className = 'msg ai';
-  el.innerHTML = `
-    <div class="msg-avatar">🧠</div>
-    <div class="msg-body">
-      <div class="thinking-bubble">
-        <div class="thinking-bar"><span></span><span></span><span></span></div>
-        <span>Procesando</span>
-        <span class="elapsed" id="elapsed-timer">0s</span>
-      </div>
-    </div>`;
-  msgs.appendChild(el);
-  msgs.scrollTop = msgs.scrollHeight;
-
-  // Start timer
-  thinkingSeconds = 0;
-  thinkingTimer = setInterval(() => {
-    thinkingSeconds++;
-    const el = document.getElementById('elapsed-timer');
-    if (el) el.textContent = thinkingSeconds + 's';
-  }, 1000);
-
-  // Show header pill
-  document.getElementById('thinking-pill').classList.add('show');
-}
-
-function hideThinking() {
-  const el = document.getElementById('thinking-msg');
-  if (el) el.remove();
-  clearInterval(thinkingTimer);
-  document.getElementById('thinking-pill').classList.remove('show');
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ERROR
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function addError(msg) {
   const msgs = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg-error';
-  el.innerHTML = `⚠️ ${msg}`;
+  el.textContent = '⚠ ' + msg;
   msgs.appendChild(el);
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  STATUS
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function setStatus(online, text) {
-  const dot  = document.getElementById('status-dot');
-  const pill = document.getElementById('status-pill');
-  const txt  = document.getElementById('status-text');
-  if (online) {
-    dot.classList.add('on');
-    pill.classList.add('live');
-  } else {
-    dot.classList.remove('on');
-    pill.classList.remove('live');
-  }
-  txt.textContent = text || (online ? 'Online' : 'Offline');
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  THINKING INDICATOR
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let thinkingEl = null;
+function showThinking() {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ai'; wrap.id = 'thinking-wrap';
+  wrap.innerHTML = `<div class="msg-avatar">🧠</div><div class="msg-body"><div class="thinking-bubble"><div class="thinking-bar"><span></span><span></span><span></span></div><span class="elapsed" id="elapsed">0s</span></div></div>`;
+  msgs.appendChild(wrap); msgs.scrollTop = msgs.scrollHeight;
+  thinkingSeconds = 0; thinkingEl = wrap;
+  document.getElementById('thinking-pill').classList.add('show');
+  thinkingTimer = setInterval(() => {
+    thinkingSeconds++;
+    const el = document.getElementById('elapsed');
+    if (el) el.textContent = thinkingSeconds + 's';
+  }, 1000);
+}
+function hideThinking() {
+  clearInterval(thinkingTimer);
+  document.getElementById('thinking-pill').classList.remove('show');
+  const el = document.getElementById('thinking-wrap');
+  if (el) el.remove();
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function setStatus(on, text) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  const pill = document.getElementById('status-pill');
+  dot.className = 'status-dot' + (on?' on':'');
+  pill.className = 'status-pill' + (on?' live':'');
+  txt.textContent = text;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  SEND MESSAGE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function sendMessage(text) {
-  if (busy) return;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function sendMessage(preset) {
+  if (!authToken) { showAuth(); return; }
+
+  if (currentPlan === 'free' && messagesUsed >= messagesLimit) {
+    switchMainTab('payment');
+    return;
+  }
 
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send-btn');
-  const message = text || input.value.trim();
-  if (!message) return;
+  const message = (preset || input.value).trim();
+  if (!message || busy) return;
 
-  busy = true;
-  input.value = '';
-  input.style.height = 'auto';
-  sendBtn.disabled = true;
-  document.getElementById('hint').textContent = 'NEXUS está pensando…';
+  input.value = ''; input.style.height = 'auto';
+  busy = true; sendBtn.disabled = true;
 
   addMessage(message, 'user');
+  hPush('user', message);
+
   showThinking();
+  document.getElementById('hint').textContent = 'Nexus está procesando…';
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 125000);
 
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 90000); // 90s timeout
-
     const res = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, conversationId, history: hGetServerHistory() }),
-      signal: ctrl.signal
+      headers: getAuthHeaders(),
+      signal: ctrl.signal,
+      body: JSON.stringify({ message, conversationId, history: hGetServerHistory() })
     });
-
     clearTimeout(timer);
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || err.error || `HTTP ${res.status}`);
+    if (res.status === 401) { doLogout(); return; }
+
+    if (res.status === 402) {
+      hideThinking();
+      const data = await res.json();
+      messagesUsed = data.messagesUsed || messagesLimit;
+      if (data.resetsAt) resetsAt = data.resetsAt;
+      updateLimitBanner(); updateProfileUI();
+      addError(data.message || `Límite de ${messagesLimit} mensajes diarios alcanzado. Se renueva a medianoche.`);
+      busy = false; sendBtn.disabled = false; input.focus(); return;
     }
 
     const data = await res.json();
+    clearTimeout(timer);
     hideThinking();
 
-    conversationId = data.conversationId;
+    if (!res.ok) { addError(data.message || 'Error del servidor'); setStatus(false,'Error'); return; }
 
-    // ── Ollama local fallback ─────────────────────────────────
-    // Si el backend respondió en Smart Mode (sin LLM), intentamos
-    // mejorar la respuesta usando Ollama local del usuario
+    if (data.conversationId) conversationId = data.conversationId;
+
+    // Update message count
+    if (data.messagesUsed !== undefined) messagesUsed = data.messagesUsed;
+    if (data.plan) currentPlan = data.plan;
+    if (data.resetsAt) resetsAt = data.resetsAt;
+    updateLimitBanner(); updateProfileUI();
+
     let finalMessage = data.message || data.response;
     if (!data.llmUsed && ollamaAvailable) {
       try {
         document.getElementById('hint').textContent = '🦙 Usando Ollama local…';
         const ollamaResp = await callOllamaLocal(message);
-        if (ollamaResp && ollamaResp.trim().length > 10) {
-          finalMessage = ollamaResp;
-          data._ollamaUsed = true;
-        }
-      } catch (e) { /* silencioso */ }
+        if (ollamaResp && ollamaResp.trim().length > 10) finalMessage = ollamaResp;
+      } catch (e) {}
     }
-    // ────────────────────────────────────────────────────────────
 
     addMessage(finalMessage, 'ai', data);
+    hPush('ai', finalMessage);
 
-    // Actualizar stats con los datos que ya vienen en la respuesta (sin hacer fetch extra)
-    if (data.neuralActivity || data.neural_activity) {
-      updateStats(data.neuralActivity || data.neural_activity);
-    }
-
+    if (data.neuralActivity || data.neural_activity) updateStats(data.neuralActivity || data.neural_activity);
     setStatus(true, 'Cerebro activo');
     document.getElementById('hint').textContent = 'Nexus está listo · Enter para enviar';
 
   } catch (err) {
     hideThinking();
-    if (err.name === 'AbortError') {
-      addError('Tiempo de espera agotado. El cerebro sigue procesando. Intenta de nuevo.');
-    } else {
-      addError(err.message);
-    }
+    if (err.name==='AbortError') addError('Tiempo de espera agotado. Intenta de nuevo.');
+    else addError(err.message);
     setStatus(false, 'Error — reintentando');
     document.getElementById('hint').textContent = '';
   }
 
-  busy = false;
-  sendBtn.disabled = false;
-  input.focus();
+  busy = false; sendBtn.disabled = false; input.focus();
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  STATS — LOAD (solo si NO busy)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function loadStats(forced = false) {
-  // La regla de oro: si el brain está ocupado con Ollama, NO hacemos fetch
-  if (busy && !forced) {
-    // Muestra aviso en el drawer si está abierto
-    document.getElementById('busy-notice').classList.add('show');
-    return;
-  }
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  STATS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function loadStats(forced=false) {
+  if (busy && !forced) { document.getElementById('busy-notice').classList.add('show'); return; }
   document.getElementById('busy-notice').classList.remove('show');
-
   try {
     const res = await fetch('/api/stats');
     if (!res.ok) return;
     const data = await res.json();
     const neural = data.neural || {};
     updateStats(neural);
+    if (data.db) {
+      if (data.db.users !== undefined) document.getElementById('db-users').textContent = data.db.users;
+      if (data.db.messages !== undefined) document.getElementById('db-messages').textContent = data.db.messages;
+    }
     setStatus(true, 'Cerebro activo');
     statsLoaded = true;
-  } catch (e) {
-    console.warn('[stats] fetch silenciado:', e.message);
-    setStatus(false, 'Desconectado');
-  }
+  } catch (e) { setStatus(false, 'Desconectado'); }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  STATS — UPDATE DOM
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function updateStats(d) {
   if (!d) return;
-  if (d.rank_loss !== undefined) {
-    document.getElementById('rank-loss').textContent = d.rank_loss.toFixed?.(5) || d.rank_loss;
-    document.getElementById('progress').style.width = Math.max(5, Math.min(95, (1 - d.rank_loss) * 100)) + '%';
-  }
-  if (d.intent_loss !== undefined)
-    document.getElementById('intent-loss').textContent = d.intent_loss.toFixed?.(5) || d.intent_loss;
-  if (d.vocab_size  !== undefined)
-    document.getElementById('vocab').textContent = d.vocab_size;
-  if (d.episodes    !== undefined)
-    document.getElementById('episodes').textContent = d.episodes;
-  if (d.trainings   !== undefined)
-    document.getElementById('trainings').textContent = d.trainings;
-  if (d.queries     !== undefined) {
-    document.getElementById('queries').textContent = d.queries;
-    document.getElementById('hint').textContent = `${d.queries} consultas · ${d.trainings || 0} entrenamientos`;
-  }
-  if (d.llm_available !== undefined)
-    updateLLM(d.llm_available, d.llm_model);
+  if (d.rank_loss!==undefined) { document.getElementById('rank-loss').textContent=d.rank_loss.toFixed?.(5)||d.rank_loss; document.getElementById('progress').style.width=Math.max(5,Math.min(95,(1-d.rank_loss)*100))+'%'; }
+  if (d.intent_loss!==undefined) document.getElementById('intent-loss').textContent=d.intent_loss.toFixed?.(5)||d.intent_loss;
+  if (d.vocab_size!==undefined) document.getElementById('vocab').textContent=d.vocab_size;
+  if (d.episodes!==undefined) document.getElementById('episodes').textContent=d.episodes;
+  if (d.trainings!==undefined) document.getElementById('trainings').textContent=d.trainings;
+  if (d.queries!==undefined) { document.getElementById('queries').textContent=d.queries; document.getElementById('hint').textContent=`${d.queries} consultas · ${d.trainings||0} entrenamientos`; }
+  if (d.llm_available!==undefined) updateLLM(d.llm_available, d.llm_model);
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  LLM BADGE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function updateLLM(available, model) {
-  const card   = document.getElementById('llm-card');
-  const name   = document.getElementById('llm-name');
-  const status = document.getElementById('llm-status');
-  if (available) {
-    card.classList.add('live');
-    name.textContent   = model || 'LLM activo';
-    status.textContent = 'Motor de lenguaje conectado';
-  } else {
-    card.classList.remove('live');
-    name.textContent   = 'LLM desconectado';
-    status.textContent = 'Configura Groq u Ollama';
-    showOfflineBanner();
-  }
+  const card=document.getElementById('llm-card');
+  const name=document.getElementById('llm-name');
+  const status=document.getElementById('llm-status');
+  if (available) { card.classList.add('live'); name.textContent=model||'LLM activo'; status.textContent='Motor de lenguaje conectado'; }
+  else { card.classList.remove('live'); name.textContent='LLM desconectado'; status.textContent='Configura Groq u Ollama'; showOfflineBanner(); }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  STATS DRAWER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function openStats() {
-  document.getElementById('stats-drawer').classList.add('open');
-  document.getElementById('drawer-overlay').classList.add('show');
-  document.getElementById('stats-btn').classList.add('active');
-  // Solo carga si no está busy y aún no lo ha cargado
-  if (!busy) loadStats();
-  else document.getElementById('busy-notice').classList.add('show');
-}
-
-function closeStats() {
-  document.getElementById('stats-drawer').classList.remove('open');
-  document.getElementById('drawer-overlay').classList.remove('show');
-  document.getElementById('stats-btn').classList.remove('active');
-  document.getElementById('busy-notice').classList.remove('show');
-}
-
-document.getElementById('stats-btn').addEventListener('click', () => {
-  const isOpen = document.getElementById('stats-drawer').classList.contains('open');
-  isOpen ? closeStats() : openStats();
-});
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  NUEVO CHAT
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 document.getElementById('new-btn').addEventListener('click', () => {
-  conversationId = null;
-  hActiveId = null;
-  hMsgs = [];
+  conversationId = null; hActiveId = null; hMsgs = [];
   const msgs = document.getElementById('messages');
-  msgs.innerHTML = `
-    <div class="welcome" id="welcome-screen">
-      <div class="welcome-glyph">
-        <svg viewBox="0 0 24 24" fill="var(--accent)"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg>
-      </div>
-      <h2>Hola, soy NEXUS</h2>
-      <p>Inteligencia artificial con redes neuronales propias y memoria episódica. Aprendo de cada conversación.</p>
-      <div class="suggestions">
-        <button class="sug" onclick="sendMessage('Hola! ¿Cómo estás hoy?')">
-          <span class="sug-icon">👋</span><span>Salúdame</span>
-          <span class="sug-text">Empieza a chatear</span>
-        </button>
-        <button class="sug" onclick="sendMessage('¿Cómo funcionas internamente?')">
-          <span class="sug-icon">🔬</span><span>Cómo funciono</span>
-          <span class="sug-text">Mi arquitectura neural</span>
-        </button>
-        <button class="sug" onclick="sendMessage('¿Quién te creó y cuál es tu historia?')">
-          <span class="sug-icon">👤</span><span>Mi creador</span>
-          <span class="sug-text">Historia y origen</span>
-        </button>
-        <button class="sug" onclick="sendMessage('¿Qué puedes hacer por mí?')">
-          <span class="sug-icon">⚡</span><span>Capacidades</span>
-          <span class="sug-text">Todo lo que puedo hacer</span>
-        </button>
-      </div>
-    </div>`;
+  msgs.innerHTML = `<div class="welcome" id="welcome-screen">
+    <div class="welcome-glyph"><svg viewBox="0 0 24 24" fill="var(--accent)"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg></div>
+    <h2>Hola, soy NEXUS</h2>
+    <p>Inteligencia artificial con redes neuronales propias y memoria episódica.</p>
+    <div class="suggestions">
+      <button class="sug" onclick="sendMessage('Hola! ¿Cómo estás hoy?')"><span class="sug-icon">👋</span><span>Salúdame</span><span class="sug-text">Empieza a chatear</span></button>
+      <button class="sug" onclick="sendMessage('¿Cómo funcionas internamente?')"><span class="sug-icon">🔬</span><span>Cómo funciono</span><span class="sug-text">Mi arquitectura neural</span></button>
+      <button class="sug" onclick="sendMessage('¿Quién te creó y cuál es tu historia?')"><span class="sug-icon">👤</span><span>Mi creador</span><span class="sug-text">Historia y origen</span></button>
+      <button class="sug" onclick="sendMessage('¿Qué puedes hacer por mí?')"><span class="sug-icon">⚡</span><span>Capacidades</span><span class="sug-text">Todo lo que puedo hacer</span></button>
+    </div>
+  </div>`;
   document.getElementById('hint').textContent = 'Nexus está listo';
+  switchMainTab('chat');
 });
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  INIT
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-loadStats();       // carga inicial (no hay busy al cargar)
-startPolling();    // polling lento que se pausa automáticamente si busy
-detectOllama();    // detectar Ollama local al arrancar
-inputEl.focus();
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  FIX ALTURA DINÁMICA — elimina el problema de las
-//  barras del navegador tapando el contenido
-//  Actualiza --app-h con window.innerHeight real
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function fixHeight() {
-  document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
-}
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ALTURA DINÁMICA
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function fixHeight() { document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px'); }
 fixHeight();
 window.addEventListener('resize', fixHeight);
 window.addEventListener('orientationchange', () => setTimeout(fixHeight, 200));
-// Al enfocar/desenfocar el input (teclado virtual aparece/desaparece)
-document.getElementById('input').addEventListener('focus', () => setTimeout(fixHeight, 300));
-document.getElementById('input').addEventListener('blur',  () => setTimeout(fixHeight, 300));
+document.getElementById('input')?.addEventListener('focus', () => setTimeout(fixHeight, 300));
+document.getElementById('input')?.addEventListener('blur',  () => setTimeout(fixHeight, 300));
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  PWA — Instalación como app nativa
-//  Oculta barra del navegador, pantalla completa
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  PWA
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 let deferredPrompt = null;
 const PWA_DISMISSED_KEY = 'nexus_pwa_dismissed';
-
 window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  // Mostrar banner solo si no fue descartado antes
-  if (!localStorage.getItem(PWA_DISMISSED_KEY)) {
-    setTimeout(() => {
-      document.getElementById('pwa-banner').classList.add('show');
-    }, 3000); // esperar 3s para no molestar al entrar
-  }
+  e.preventDefault(); deferredPrompt = e;
+  if (!localStorage.getItem(PWA_DISMISSED_KEY)) setTimeout(() => { document.getElementById('pwa-banner').classList.add('show'); }, 3000);
 });
-
 document.getElementById('pwa-install-btn').addEventListener('click', async () => {
-  const banner = document.getElementById('pwa-banner');
-  banner.classList.remove('show');
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    if (outcome === 'accepted') {
-      console.log('[PWA] Instalada 🎉');
-    }
-  }
+  document.getElementById('pwa-banner').classList.remove('show');
+  if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; }
+});
+function dismissPWA() { document.getElementById('pwa-banner').classList.remove('show'); localStorage.setItem(PWA_DISMISSED_KEY, '1'); }
+window.addEventListener('appinstalled', () => { document.getElementById('pwa-banner').classList.remove('show'); localStorage.setItem(PWA_DISMISSED_KEY, '1'); });
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ENTER KEY en auth inputs
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+['login-identifier','login-password'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+});
+['reg-username','reg-email','reg-password'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => { if (e.key==='Enter') doRegister(); });
 });
 
-function dismissPWA() {
-  document.getElementById('pwa-banner').classList.remove('show');
-  localStorage.setItem(PWA_DISMISSED_KEY, '1');
-}
-
-// Si ya está instalada como PWA, no mostrar banner
-window.addEventListener('appinstalled', () => {
-  document.getElementById('pwa-banner').classList.remove('show');
-  localStorage.setItem(PWA_DISMISSED_KEY, '1');
-});
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  INIT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+initApp();
 </script>
-
 </body>
 </html>
