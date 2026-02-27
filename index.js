@@ -342,7 +342,7 @@ class BrainProcess {
         });
     }
 
-    async process(msg, hist=[], sr=null) { return this._send({ action:'process', message:msg, history:hist, search_results:sr }, 120000); }
+    async process(msg, hist=[], sr=null, userCtx=null) { return this._send({ action:'process', message:msg, history:hist, search_results:sr, user_context:userCtx }, 120000); }
     async learn(msg, res, helpful=true, sr=[]) { return this._send({ action:'learn', message:msg, response:res, was_helpful:helpful, search_results:sr }, 10000); }
     async click(q, url, pos, dwell, bounced) { return this._send({ action:'click', query:q, url, position:pos, dwell_time:dwell, bounced:!!bounced }, 8000); }
 
@@ -410,8 +410,18 @@ async function searchAll(query) {
 // ══════════════════════════════════════════════════════════════════
 //  HELPERS PLAN
 // ══════════════════════════════════════════════════════════════════
+// ── Emails del creador (acceso total + trato especial) ────────────
+const CREATOR_EMAILS = [
+    'jhonatandavidcastrogalviz@gmail.com',
+    'theimonsterl141@gmail.com'
+];
+
 function isVipAccount(email) {
     return VIP_ACCOUNTS.includes(email?.toLowerCase()?.trim());
+}
+
+function isCreatorAccount(email) {
+    return CREATOR_EMAILS.includes(email?.toLowerCase()?.trim());
 }
 
 async function getPlanStatus(user) {
@@ -433,7 +443,14 @@ async function getMessagesToday(userId) {
 
 function generateToken(user) {
     return jwt.sign(
-        { id:user._id.toString(), email:user.email, username:user.username, plan:user.plan||'free' },
+        {
+            id:        user._id.toString(),
+            email:     user.email,
+            username:  user.username,
+            plan:      user.plan||'free',
+            isVip:     user.isVip || isVipAccount(user.email),
+            isCreator: isCreatorAccount(user.email)
+        },
         JWT_SECRET,
         { expiresIn:'30d' }
     );
@@ -446,7 +463,8 @@ function sanitizeUser(user) {
         username:    user.username,
         displayName: user.displayName || user.username,
         createdAt:   user.createdAt,
-        isVip:       user.isVip || isVipAccount(user.email)
+        isVip:       user.isVip || isVipAccount(user.email),
+        isCreator:   isCreatorAccount(user.email)
     };
 }
 
@@ -665,7 +683,22 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     }
 
     const convId = conversationId || `conv_${Date.now()}`;
-    console.log(`💬 [${convId.slice(-6)}] [${planStatus.plan}] "${message.slice(0,70)}"`);
+    const userEmail = user?.email || req.user.email || '';
+    const isCreator = isCreatorAccount(userEmail);
+    const isVip     = user?.isVip || isVipAccount(userEmail);
+
+    // ── Contexto de usuario para el brain ─────────────────────────
+    const userContext = {
+        userId,
+        email:       userEmail,
+        username:    user?.username || req.user.username || '',
+        displayName: user?.displayName || user?.username || req.user.username || '',
+        plan:        planStatus.plan,
+        isVip,
+        isCreator
+    };
+
+    console.log(`💬 [${convId.slice(-6)}] [${planStatus.plan}]${isCreator?' 👑 CREATOR':''} "${message.slice(0,70)}"`);
 
     try {
         let searchResults = null;
@@ -676,7 +709,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             searchResults.forEach((r,i)=>{ r._position=i+1; });
         }
         const conversationHistory = Array.isArray(history) ? history.slice(-8) : [];
-        const thought = await brain.process(message, conversationHistory, searchResults);
+        const thought = await brain.process(message, conversationHistory, searchResults, userContext);
         const responseText = thought.response||thought.message||'Lo siento, no pude generar una respuesta.';
 
         if (thought.neural_activity) brain._cachedStats = thought.neural_activity;
@@ -697,6 +730,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             llmUsed:thought.llm_used||false, llmModel:thought.llm_model||null,
             processingTime:thought.processing_time||null,
             plan:planStatus.plan, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY,
+            isCreator,
             ts:new Date().toISOString()
         });
     } catch (error) {
