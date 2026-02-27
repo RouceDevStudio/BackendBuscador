@@ -7,20 +7,39 @@ const path        = require('path');
 const { spawn }   = require('child_process');
 const fs          = require('fs').promises;
 const MongoClient = require('mongodb').MongoClient;
+const bcrypt      = require('bcryptjs');
+const jwt         = require('jsonwebtoken');
+const crypto      = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'nexus_fallback_secret_change_in_prod';
+
+// ── Configuración de pagos ─────────────────────────────────────────
+const PAYPAL_EMAIL     = 'jhonatandavidcastrogalviz@gmail.com';
+const PLAN_PRICE       = 10.00;
+const PLAN_CURRENCY    = 'USD';
+const FREE_MSG_PER_DAY = 10;
+const PLAN_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+
+// ── Cuentas VIP permanentes ────────────────────────────────────────
+const VIP_ACCOUNTS = [
+  'jhonatandavidcastrogalviz@gmail.com',
+  'theimonsterl141@gmail.com'
+];
+
+// ── Stores en memoria (anti-fraude) ───────────────────────────────
+const rateLimitStore = new Map();
+const loginAttempts  = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static('public'));
-// Dar tiempo suficiente para que Ollama genere — calidad > velocidad
 app.use((req, res, next) => { res.setTimeout(130000); next(); });
 
 // ══════════════════════════════════════════════════════════════════
 //  BASE DE DATOS
 // ══════════════════════════════════════════════════════════════════
-
 let db = null;
 
 async function connectDB() {
@@ -30,642 +49,745 @@ async function connectDB() {
         db = client.db(process.env.MONGODB_DB_NAME || 'nexus');
         await Promise.all([
             db.collection('messages').createIndex({ conversationId: 1, ts: 1 }),
+            db.collection('messages').createIndex({ userId: 1, ts: -1 }),
             db.collection('clicks').createIndex({ query: 1, ts: -1 }),
             db.collection('searches').createIndex({ ts: -1 }),
+            db.collection('users').createIndex({ email: 1 }, { unique: true }),
+            db.collection('users').createIndex({ username: 1 }, { unique: true }),
+            db.collection('payments').createIndex({ transactionId: 1 }, { unique: true }),
+            db.collection('payments').createIndex({ userId: 1, ts: -1 }),
+            db.collection('fraud_log').createIndex({ ts: -1 }),
+            db.collection('fraud_log').createIndex({ ip: 1, ts: -1 }),
+            db.collection('used_transactions').createIndex({ transactionId: 1 }, { unique: true }),
+            db.collection('fraud_blacklist').createIndex({ email: 1 }),
         ]);
         console.log('✅ MongoDB conectado');
+        setInterval(runMonthlyCheck, 60 * 60 * 1000);
+        runMonthlyCheck();
     } catch (e) {
         console.warn('⚠️  MongoDB no disponible:', e.message);
     }
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  PROCESO PYTHON PERSISTENTE (el cerebro real)
+//  VERIFICACIÓN MENSUAL — degradar planes vencidos
 // ══════════════════════════════════════════════════════════════════
+async function runMonthlyCheck() {
+    if (!db) return;
+    try {
+        const now = new Date();
+        const expired = await db.collection('users').find({
+            plan: 'premium',
+            isVip: { $ne: true },
+            planExpiresAt: { $lt: now }
+        }).toArray();
+        for (const user of expired) {
+            await db.collection('users').updateOne(
+                { _id: user._id },
+                { $set: { plan: 'free', planExpired: true, planDegradedAt: now } }
+            );
+            console.log(`📉 Plan degradado a FREE: ${user.email}`);
+        }
+        if (expired.length > 0) console.log(`✅ Verificación mensual: ${expired.length} plan(es) degradado(s)`);
+    } catch (e) { console.error('[monthlyCheck]', e.message); }
+}
 
+// ══════════════════════════════════════════════════════════════════
+//  ANTI-FRAUDE
+// ══════════════════════════════════════════════════════════════════
+function getClientIP(req) {
+    return (
+        req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+        req.headers['x-real-ip'] ||
+        req.connection?.remoteAddress ||
+        req.socket?.remoteAddress ||
+        '0.0.0.0'
+    );
+}
+
+async function logFraud(type, details, req) {
+    console.warn(`🚨 FRAUDE [${type}]`, details);
+    if (!db) return;
+    try {
+        await db.collection('fraud_log').insertOne({
+            type, ip: getClientIP(req), ua: req.headers['user-agent'] || '', details, ts: new Date()
+        });
+    } catch (e) {}
+}
+
+function checkRateLimit(req, res, maxReq = 100, windowMs = 60000) {
+    const ip  = getClientIP(req);
+    const now = Date.now();
+    const entry = rateLimitStore.get(ip);
+    if (!entry || now > entry.resetAt) {
+        rateLimitStore.set(ip, { count: 1, resetAt: now + windowMs });
+        return true;
+    }
+    entry.count++;
+    if (entry.count > maxReq) {
+        res.status(429).json({ error: 'Demasiadas solicitudes. Espera un momento.' });
+        return false;
+    }
+    return true;
+}
+
+function checkLoginAttempts(req, res, identifier) {
+    const ip  = getClientIP(req);
+    const key = `${ip}:${identifier}`;
+    const now = Date.now();
+    const entry = loginAttempts.get(key);
+    if (entry && now < entry.lockedUntil) {
+        const minLeft = Math.ceil((entry.lockedUntil - now) / 60000);
+        res.status(429).json({ error: `Cuenta bloqueada por intentos fallidos. Intenta en ${minLeft} min.` });
+        return false;
+    }
+    return true;
+}
+
+function recordFailedLogin(req, identifier) {
+    const ip  = getClientIP(req);
+    const key = `${ip}:${identifier}`;
+    const now = Date.now();
+    const entry = loginAttempts.get(key) || { count: 0, lockedUntil: 0 };
+    entry.count++;
+    if (entry.count >= 5) {
+        entry.lockedUntil = now + 15 * 60 * 1000;
+        logFraud('brute_force_login', { identifier, attempts: entry.count }, { headers: {}, connection: { remoteAddress: ip } });
+    }
+    loginAttempts.set(key, entry);
+}
+
+function clearFailedLogins(req, identifier) {
+    loginAttempts.delete(`${getClientIP(req)}:${identifier}`);
+}
+
+function isValidPaypalTxId(txId) {
+    return /^[A-Z0-9]{13,25}$/.test(txId.trim().toUpperCase());
+}
+
+async function detectFraudPatterns(userId, transactionId, payerEmail, req) {
+    if (!db) return { ok: true };
+    const ip      = getClientIP(req);
+    const now     = new Date();
+    const hourAgo = new Date(now - 60 * 60 * 1000);
+    const dayAgo  = new Date(now - 24 * 60 * 60 * 1000);
+
+    // 1. Transacción ya usada en otra cuenta
+    const txUsed = await db.collection('used_transactions').findOne({ transactionId });
+    if (txUsed) {
+        await logFraud('duplicate_transaction', { transactionId, originalUserId: txUsed.userId, attemptUserId: userId }, req);
+        return { ok: false, reason: 'Esta transacción ya fue utilizada en otra cuenta.' };
+    }
+
+    // 2. Múltiples verificaciones desde la misma IP en la última hora (max 3)
+    const ipVerifications = await db.collection('payments').countDocuments({ ip, ts: { $gte: hourAgo } });
+    if (ipVerifications >= 3) {
+        await logFraud('ip_payment_flood', { ip, count: ipVerifications }, req);
+        return { ok: false, reason: 'Demasiados intentos de pago desde esta IP. Intenta más tarde.' };
+    }
+
+    // 3. Usuario con más de 5 intentos de verificación en 24h (spam de txIds falsos)
+    const userFraudAttempts = await db.collection('fraud_log').countDocuments({ 'details.userId': userId, ts: { $gte: dayAgo } });
+    if (userFraudAttempts >= 5) {
+        await logFraud('user_payment_spam', { userId }, req);
+        return { ok: false, reason: 'Demasiados intentos fallidos. Contacta soporte.' };
+    }
+
+    // 4. Email del pagador en lista negra
+    if (payerEmail) {
+        const blacklisted = await db.collection('fraud_blacklist').findOne({ email: payerEmail.toLowerCase() });
+        if (blacklisted) {
+            await logFraud('blacklisted_payer', { payerEmail }, req);
+            return { ok: false, reason: 'El email del pagador está reportado como fraudulento.' };
+        }
+    }
+
+    // 5. Mismo email pagador usado en más de 3 cuentas distintas
+    if (payerEmail) {
+        const samePayerAccounts = await db.collection('payments').distinct('userId', {
+            payerEmail: payerEmail.toLowerCase(), verified: true
+        });
+        if (samePayerAccounts.length >= 3) {
+            await logFraud('payer_multi_account', { payerEmail, accounts: samePayerAccounts.length }, req);
+            return { ok: false, reason: 'Este email de PayPal ya fue usado en demasiadas cuentas.' };
+        }
+    }
+
+    // 6. Formato de txId inválido (no es un ID real de PayPal)
+    if (!isValidPaypalTxId(transactionId)) {
+        await logFraud('invalid_tx_format', { transactionId, userId }, req);
+        return { ok: false, reason: 'ID de transacción con formato inválido. Verifica que lo copiaste correctamente de PayPal.' };
+    }
+
+    // 7. Misma IP con más de 2 cuentas creadas en 24h (cuentas falsas masivas)
+    const ipAccounts = await db.collection('users').countDocuments({ registrationIp: ip, createdAt: { $gte: dayAgo } });
+    if (ipAccounts >= 3) {
+        await logFraud('ip_account_farm', { ip, count: ipAccounts }, req);
+        return { ok: false, reason: 'Demasiadas cuentas creadas desde esta red. Contacta soporte.' };
+    }
+
+    // 8. TxId con caracteres repetidos (ej: AAAAAAAAAAAAAAAA — obviamente falso)
+    if (/^(.)\1{8,}$/.test(transactionId.trim())) {
+        await logFraud('fake_tx_pattern', { transactionId, userId }, req);
+        return { ok: false, reason: 'ID de transacción inválido.' };
+    }
+
+    return { ok: true };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  AUTH MIDDLEWARE
+// ══════════════════════════════════════════════════════════════════
+function authMiddleware(req, res, next) {
+    const auth = req.headers['authorization'];
+    if (!auth || !auth.startsWith('Bearer ')) { req.user = null; return next(); }
+    try { req.user = jwt.verify(auth.slice(7), JWT_SECRET); }
+    catch (e) { req.user = null; }
+    next();
+}
+
+function requireAuth(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'No autenticado' });
+    next();
+}
+
+app.use(authMiddleware);
+
+// ══════════════════════════════════════════════════════════════════
+//  PROCESO PYTHON (cerebro neural)
+// ══════════════════════════════════════════════════════════════════
 class BrainProcess {
     constructor() {
-        this.proc          = null;
-        this.queue         = [];
-        this.ready         = false;
-        this.restarts      = 0;
-        this.stats         = {};
-        this.requestCounter = 0;
-        this.lastOllamaError = 0;
-        this.ollamaErrorCount = 0;
-        // ── Cache de stats para no bloquear el brain mientras Ollama piensa ──
-        this._cachedStats    = null;   // última respuesta de stats conocida
-        this._statsUpdating  = false;  // evitar peticiones simultáneas de stats
+        this.proc = null; this.queue = []; this.ready = false;
+        this.restarts = 0; this.stats = {}; this.requestCounter = 0;
+        this.lastOllamaError = 0; this.ollamaErrorCount = 0;
+        this._cachedStats = null; this._statsUpdating = false;
         this._start();
     }
 
     _start() {
         const brainPath = path.join(__dirname, 'neural', 'brain.py');
         const env = { ...process.env, PYTHONUNBUFFERED: '1' };
-
         console.log('🧠 Iniciando cerebro NEXUS...');
         this.proc = spawn('python3', ['-u', brainPath], { env });
 
         let buffer = '';
-
         this.proc.stdout.on('data', (chunk) => {
             buffer += chunk.toString();
             const parts = buffer.split('\n');
-            buffer = parts.pop(); // último fragmento incompleto
-
+            buffer = parts.pop();
             for (const part of parts) {
                 const line = part.trim();
                 if (!line) continue;
-
-                // Mensajes de log del brain (no JSON)
                 if (line.startsWith('✓') || line.startsWith('⚠') || line.startsWith('[')) {
                     console.log('🐍', line);
-                    if (line.includes('listo') || line.includes('ready')) {
-                        this.ready = true;
-                    }
+                    if (line.includes('listo') || line.includes('ready')) this.ready = true;
                     continue;
                 }
-
-                // Respuesta JSON para la cola
                 try {
                     const response = JSON.parse(line);
-                    
-                    // ✅ FIX #4: Correlación por requestId
                     const requestId = response._requestId;
                     if (requestId) {
                         const idx = this.queue.findIndex(p => p.requestId === requestId);
-                        if (idx !== -1) {
-                            const pending = this.queue.splice(idx, 1)[0];
-                            clearTimeout(pending.timeoutId);
-                            delete response._requestId; // Limpiar metadata
-                            pending.resolve(response);
-                        }
+                        if (idx !== -1) { const p = this.queue.splice(idx,1)[0]; clearTimeout(p.timeoutId); delete response._requestId; p.resolve(response); }
                     } else {
-                        // Fallback: FIFO
-                        const pending = this.queue.shift();
-                        if (pending) {
-                            clearTimeout(pending.timeoutId);
-                            pending.resolve(response);
-                        }
+                        const p = this.queue.shift();
+                        if (p) { clearTimeout(p.timeoutId); p.resolve(response); }
                     }
                 } catch (e) {
-                    console.error('❌ Parse error:', line.slice(0, 120), e.message);
-                    const pending = this.queue.shift();
-                    if (pending) {
-                        clearTimeout(pending.timeoutId);
-                        pending.reject(new Error('JSON parse error'));
-                    }
+                    const p = this.queue.shift();
+                    if (p) { clearTimeout(p.timeoutId); p.reject(new Error('JSON parse error')); }
                 }
             }
         });
 
-        // ✅ v5.0: Control de errores repetitivos
-        this.lastOllamaError = 0;
-        this.ollamaErrorCount = 0;
-        
         this.proc.stderr.on('data', (d) => {
             const msg = d.toString().trim();
-            
-            // ✅ FILTRAR ERRORES REPETITIVOS DE OLLAMA
             if (msg.includes('Ollama') && msg.includes('HTTP Error 500')) {
-                const now = Date.now();
-                // Solo mostrar cada 10 segundos
-                if (now - this.lastOllamaError > 10000) {
-                    console.error('⚠️  Ollama error (usando fallback Smart Mode)');
-                    this.lastOllamaError = now;
-                    this.ollamaErrorCount++;
-                    
-                    // Sugerencia después de varios errores
-                    if (this.ollamaErrorCount === 3) {
-                        console.log('\n💡 Ollama tiene problemas. El sistema funciona en Smart Mode.');
-                        console.log('   Para resolver: verifica que "ollama serve" esté corriendo\n');
-                    }
+                if (Date.now() - this.lastOllamaError > 10000) {
+                    console.error('⚠️  Ollama error (Smart Mode)');
+                    this.lastOllamaError = Date.now(); this.ollamaErrorCount++;
                 }
-                return; // No mostrar más
+                return;
             }
-            
-            // ✅ Filtrar fallback messages repetitivos
-            if (msg.includes('ResponseGen') && msg.includes('fallback')) {
-                return; // Silenciar
-            }
-            
-            // Mostrar otros errores normalmente
-            if (msg && !msg.includes('UserWarning')) {
-                console.error('🐍 ERR:', msg);
-            }
+            if (msg.includes('ResponseGen') && msg.includes('fallback')) return;
+            if (msg && !msg.includes('UserWarning')) console.error('🐍 ERR:', msg);
         });
 
         this.proc.on('close', (code) => {
             console.warn(`⚠️  Brain cerró (code=${code}). Reiniciando...`);
             this.ready = false;
-            for (const p of this.queue) {
-                clearTimeout(p.timeoutId);
-                p.reject(new Error('Brain process died'));
-            }
-            this.queue = [];
-            this.restarts++;
-            if (this.restarts < 15) {
-                setTimeout(() => this._start(), 2500);
-            } else {
-                console.error('❌ Brain no puede reiniciarse. Revisa Python.');
-            }
+            for (const p of this.queue) { clearTimeout(p.timeoutId); p.reject(new Error('Brain died')); }
+            this.queue = []; this.restarts++;
+            if (this.restarts < 15) setTimeout(() => this._start(), 2500);
         });
-
-        // ✅ FIX #11: Esperar señal real en lugar de timeout arbitrario
-        // El ready ahora se activa cuando detectamos "ready" en stdout
     }
 
-    _send(data, timeoutMs = 120000) {  // 120s por defecto
+    _send(data, timeoutMs = 120000) {
         return new Promise((resolve, reject) => {
-            // ✅ FIX #4: Agregar requestId para correlación
             const requestId = `${Date.now()}_${this.requestCounter++}`;
             data._requestId = requestId;
-
             const timeoutId = setTimeout(() => {
                 const idx = this.queue.findIndex(p => p.requestId === requestId);
-                if (idx !== -1) {
-                    this.queue.splice(idx, 1);
-                }
+                if (idx !== -1) this.queue.splice(idx, 1);
                 reject(new Error('Brain timeout'));
             }, timeoutMs);
-
             this.queue.push({ resolve, reject, timeoutId, requestId });
-            
-            try {
-                this.proc.stdin.write(JSON.stringify(data) + '\n');
-            } catch (e) {
+            try { this.proc.stdin.write(JSON.stringify(data) + '\n'); }
+            catch (e) {
                 const idx = this.queue.findIndex(p => p.requestId === requestId);
-                if (idx !== -1) {
-                    this.queue.splice(idx, 1);
-                }
-                clearTimeout(timeoutId);
-                reject(new Error('Failed to write to brain process'));
+                if (idx !== -1) this.queue.splice(idx, 1);
+                clearTimeout(timeoutId); reject(e);
             }
         });
     }
 
-    async process(message, history = [], searchResults = null) {
-        return this._send({ 
-            action: 'process', 
-            message, 
-            history, 
-            search_results: searchResults 
-        }, 120000);  // 120s — Ollama puede tardar, calidad > velocidad
-    }
-
-    async learn(message, response, wasHelpful = true, searchResults = []) {
-        return this._send({ 
-            action: 'learn', 
-            message, 
-            response, 
-            was_helpful: wasHelpful, 
-            search_results: searchResults 
-        }, 10000);
-    }
-
-    async click(query, url, position, dwellTime, bounced) {
-        return this._send({ 
-            action: 'click', 
-            query, 
-            url, 
-            position, 
-            dwell_time: dwellTime, 
-            bounced: !!bounced 
-        }, 8000);
-    }
+    async process(msg, hist=[], sr=null) { return this._send({ action:'process', message:msg, history:hist, search_results:sr }, 120000); }
+    async learn(msg, res, helpful=true, sr=[]) { return this._send({ action:'learn', message:msg, response:res, was_helpful:helpful, search_results:sr }, 10000); }
+    async click(q, url, pos, dwell, bounced) { return this._send({ action:'click', query:q, url, position:pos, dwell_time:dwell, bounced:!!bounced }, 8000); }
 
     async getStats() {
-        // Si hay stats cacheadas, devolverlas inmediatamente sin bloquear el brain.
-        // Actualizar en background solo si no hay ya una actualización en curso.
         if (this._cachedStats) {
             if (!this._statsUpdating) {
                 this._statsUpdating = true;
-                this._send({ action: 'stats' }, 120000)
-                    .then(s => { this._cachedStats = s; this.stats = s; })
-                    .catch(() => {})
-                    .finally(() => { this._statsUpdating = false; });
+                this._send({ action:'stats' }, 120000)
+                    .then(s=>{ this._cachedStats=s; this.stats=s; })
+                    .catch(()=>{})
+                    .finally(()=>{ this._statsUpdating=false; });
             }
             return this._cachedStats;
         }
-        // Primera vez: esperar la respuesta real
-        const s = await this._send({ action: 'stats' }, 120000);
-        this._cachedStats = s;
-        this.stats = s;
-        return s;
+        const s = await this._send({ action:'stats' }, 120000);
+        this._cachedStats = s; this.stats = s; return s;
     }
 
-    shutdown() {
-        if (this.proc) {
-            this.proc.kill('SIGTERM');
-        }
-    }
+    shutdown() { if (this.proc) this.proc.kill('SIGTERM'); }
 }
 
 const brain = new BrainProcess();
-
-// ✅ FIX #10: Manejo apropiado de señales de terminación
-process.on('SIGTERM', () => {
-    console.log('📛 Recibida señal SIGTERM, cerrando...');
-    brain.shutdown();
-    if (db) {
-        // Cerrar conexión MongoDB si existe
-        db.client?.close();
-    }
-    process.exit(0);
-});
-
-process.on('SIGINT', () => {
-    console.log('📛 Recibida señal SIGINT (Ctrl+C), cerrando...');
-    brain.shutdown();
-    if (db) {
-        db.client?.close();
-    }
-    process.exit(0);
-});
+process.on('SIGTERM', () => { brain.shutdown(); if (db) db.client?.close(); process.exit(0); });
+process.on('SIGINT',  () => { brain.shutdown(); if (db) db.client?.close(); process.exit(0); });
 
 // ══════════════════════════════════════════════════════════════════
 //  BÚSQUEDA WEB
 // ══════════════════════════════════════════════════════════════════
-
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 const HEADERS = { 'User-Agent': UA, 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8' };
 
 async function searchDDG(query) {
     try {
-        // ✅ FIX #14: Sanitizar query
-        const sanitizedQuery = encodeURIComponent(query.trim());
-        const r = await axios.get('https://api.duckduckgo.com/', {
-            params: { q: sanitizedQuery, format: 'json', no_html: 1, skip_disambig: 1 },
-            headers: HEADERS, 
-            timeout: 6000
-        });
-        const results = [];
-        const d = r.data;
-        if (d.AbstractText) {
-            results.push({
-                title: d.Heading || query,
-                url: d.AbstractURL || '',
-                description: d.AbstractText,
-                snippet: d.AbstractText,
-                source: d.AbstractSource || 'Wikipedia'
-            });
-        }
-        for (const t of (d.RelatedTopics || [])) {
-            if (t.FirstURL && t.Text) {
-                results.push({
-                    title: t.Text.split(' - ')[0].slice(0, 90),
-                    url: t.FirstURL,
-                    description: t.Text,
-                    snippet: t.Text,
-                    source: 'DuckDuckGo'
-                });
-                if (results.length >= 6) break;
-            }
-        }
+        const q = encodeURIComponent(query.trim());
+        const r = await axios.get('https://api.duckduckgo.com/', { params:{q,format:'json',no_html:1,skip_disambig:1}, headers:HEADERS, timeout:6000 });
+        const results=[]; const d=r.data;
+        if (d.AbstractText) results.push({ title:d.Heading||query, url:d.AbstractURL||'', description:d.AbstractText, snippet:d.AbstractText, source:d.AbstractSource||'Wikipedia' });
+        for (const t of (d.RelatedTopics||[])) { if (t.FirstURL&&t.Text) { results.push({ title:t.Text.split(' - ')[0].slice(0,90), url:t.FirstURL, description:t.Text, snippet:t.Text, source:'DuckDuckGo' }); if (results.length>=6) break; } }
         return results;
-    } catch (error) {
-        // ✅ FIX #7: Loggear errores de búsqueda
-        console.error('[DDG Search] Error:', error.message);
-        return [];
-    }
+    } catch { return []; }
 }
 
 async function searchBing(query) {
     try {
-        // ✅ FIX #14: Sanitizar query
-        const sanitizedQuery = encodeURIComponent(query.trim());
-        const url = `https://www.bing.com/search?q=${sanitizedQuery}&setlang=es`;
-        const r = await axios.get(url, { headers: HEADERS, timeout: 8000 });
-        const $ = cheerio.load(r.data);
-        const results = [];
-        $('.b_algo').each((i, el) => {
-            if (results.length >= 7) return false;
-            const titleEl = $(el).find('h2 a');
-            const descEl  = $(el).find('.b_caption p, .b_algoSlug');
-            const title   = titleEl.text().trim();
-            const href    = titleEl.attr('href');
-            const desc    = descEl.first().text().trim();
-            if (title && href && href.startsWith('http')) {
-                results.push({ title, url: href, description: desc, snippet: desc, source: 'Bing' });
-            }
+        const q = encodeURIComponent(query.trim());
+        const r = await axios.get(`https://www.bing.com/search?q=${q}&setlang=es`, { headers:HEADERS, timeout:8000 });
+        const $ = cheerio.load(r.data); const results=[];
+        $('.b_algo').each((i,el)=>{
+            if (results.length>=7) return false;
+            const te=$(el).find('h2 a'), de=$(el).find('.b_caption p,.b_algoSlug');
+            const title=te.text().trim(), href=te.attr('href'), desc=de.first().text().trim();
+            if (title&&href&&href.startsWith('http')) results.push({ title, url:href, description:desc, snippet:desc, source:'Bing' });
         });
         return results;
-    } catch (error) {
-        // ✅ FIX #7: Loggear errores de búsqueda
-        console.error('[Bing Search] Error:', error.message);
-        return [];
-    }
+    } catch { return []; }
 }
 
 async function searchAll(query) {
-    const [ddg, bing] = await Promise.allSettled([searchDDG(query), searchBing(query)]);
-    const all = [
-        ...(ddg.status === 'fulfilled'  ? ddg.value  : []),
-        ...(bing.status === 'fulfilled' ? bing.value : [])
-    ];
-    
-    // ✅ FIX #7: Informar si ambas búsquedas fallaron
-    if (all.length === 0) {
-        console.warn('[Search] Ambas búsquedas (DDG + Bing) fallaron o no retornaron resultados');
-    }
-    
-    const seen = new Set();
-    return all.filter(r => r.url && !seen.has(r.url) && seen.add(r.url));
+    const [ddg,bing] = await Promise.allSettled([searchDDG(query), searchBing(query)]);
+    const all=[...(ddg.status==='fulfilled'?ddg.value:[]), ...(bing.status==='fulfilled'?bing.value:[])];
+    const seen=new Set();
+    return all.filter(r=>r.url&&!seen.has(r.url)&&seen.add(r.url));
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  RUTAS API
+//  HELPERS PLAN
+// ══════════════════════════════════════════════════════════════════
+function isVipAccount(email) {
+    return VIP_ACCOUNTS.includes(email?.toLowerCase()?.trim());
+}
+
+async function getPlanStatus(user) {
+    if (!user) return { plan:'free', active:false };
+    if (user.isVip || isVipAccount(user.email)) return { plan:'premium', active:true, isVip:true, expiresAt:null };
+    if (user.plan==='premium' && user.planExpiresAt) {
+        if (new Date(user.planExpiresAt) > new Date()) return { plan:'premium', active:true, isVip:false, expiresAt:user.planExpiresAt };
+        if (db) await db.collection('users').updateOne({ _id:user._id }, { $set:{ plan:'free', planExpired:true } });
+        return { plan:'free', active:false, expired:true };
+    }
+    return { plan:'free', active:false };
+}
+
+async function getMessagesToday(userId) {
+    if (!db) return 0;
+    const today = new Date(); today.setHours(0,0,0,0);
+    return db.collection('messages').countDocuments({ userId, role:'user', ts:{ $gte:today } });
+}
+
+function generateToken(user) {
+    return jwt.sign(
+        { id:user._id.toString(), email:user.email, username:user.username, plan:user.plan||'free' },
+        JWT_SECRET,
+        { expiresIn:'30d' }
+    );
+}
+
+function sanitizeUser(user) {
+    return {
+        id:          user._id.toString(),
+        email:       user.email,
+        username:    user.username,
+        displayName: user.displayName || user.username,
+        createdAt:   user.createdAt,
+        isVip:       user.isVip || isVipAccount(user.email)
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  RUTAS AUTH
 // ══════════════════════════════════════════════════════════════════
 
-// POST /api/chat ──────────────────────────────────────────────────
-app.post('/api/chat', async (req, res) => {
-    const { message, conversationId, userId, history } = req.body;
-    if (!message?.trim()) return res.status(400).json({ error: 'Mensaje vacío' });
+// POST /api/auth/register
+app.post('/api/auth/register', async (req, res) => {
+    if (!checkRateLimit(req, res, 10, 60000)) return;
+    const { email, username, password } = req.body;
+    if (!email||!username||!password) return res.status(400).json({ error:'Email, usuario y contraseña requeridos' });
+    if (password.length<6) return res.status(400).json({ error:'Contraseña mínimo 6 caracteres' });
+    if (username.length<3) return res.status(400).json({ error:'Usuario mínimo 3 caracteres' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error:'Email inválido' });
+    if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) return res.status(400).json({ error:'Usuario: solo letras, números, _, -, . (3-30 chars)' });
+    if (!db) return res.status(503).json({ error:'Base de datos no disponible' });
+    try {
+        const exists = await db.collection('users').findOne({ $or:[{ email:email.toLowerCase() },{ username:username.toLowerCase() }] });
+        if (exists) {
+            if (exists.email===email.toLowerCase()) return res.status(409).json({ error:'El email ya está registrado' });
+            return res.status(409).json({ error:'El nombre de usuario ya está en uso' });
+        }
+        const isVip = isVipAccount(email);
+        const hash  = await bcrypt.hash(password, 12);
+        const result = await db.collection('users').insertOne({
+            email:email.toLowerCase(), username:username.toLowerCase(), displayName:username,
+            password:hash, plan:isVip?'premium':'free', isVip,
+            planExpiresAt:null, createdAt:new Date(), updatedAt:new Date(), registrationIp:getClientIP(req)
+        });
+        const user  = await db.collection('users').findOne({ _id:result.insertedId });
+        const token = generateToken(user);
+        const planStatus = await getPlanStatus(user);
+        const msgsToday  = planStatus.plan==='free' ? 0 : null;
+        res.json({ token, user:sanitizeUser(user), plan:planStatus, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY });
+    } catch (e) { console.error('[register]',e.message); res.status(500).json({ error:'Error al registrar' }); }
+});
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+    if (!checkRateLimit(req, res, 20, 60000)) return;
+    const { identifier, password } = req.body;
+    if (!identifier||!password) return res.status(400).json({ error:'Credenciales requeridas' });
+    if (!db) return res.status(503).json({ error:'Base de datos no disponible' });
+    if (!checkLoginAttempts(req, res, identifier)) { await logFraud('login_blocked',{ identifier },req); return; }
+    try {
+        const id   = identifier.toLowerCase().trim();
+        const user = await db.collection('users').findOne({ $or:[{ email:id },{ username:id }] });
+        if (!user) { recordFailedLogin(req,identifier); return res.status(401).json({ error:'Credenciales incorrectas' }); }
+        const valid = await bcrypt.compare(password, user.password);
+        if (!valid) { recordFailedLogin(req,identifier); await logFraud('failed_login',{ identifier, userId:user._id.toString() },req); return res.status(401).json({ error:'Credenciales incorrectas' }); }
+        clearFailedLogins(req, identifier);
+        if (isVipAccount(user.email) && !user.isVip) {
+            await db.collection('users').updateOne({ _id:user._id },{ $set:{ isVip:true, plan:'premium' } });
+            user.isVip=true; user.plan='premium';
+        }
+        await db.collection('users').updateOne({ _id:user._id },{ $set:{ lastLoginAt:new Date(), lastLoginIp:getClientIP(req) } });
+        const token     = generateToken(user);
+        const planStatus= await getPlanStatus(user);
+        const msgsToday = planStatus.plan==='free' ? await getMessagesToday(user._id.toString()) : null;
+        res.json({ token, user:sanitizeUser(user), plan:planStatus, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY });
+    } catch (e) { console.error('[login]',e.message); res.status(500).json({ error:'Error al iniciar sesión' }); }
+});
+
+// GET /api/auth/me
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+    if (!db) return res.status(503).json({ error:'BD no disponible' });
+    try {
+        const { ObjectId } = require('mongodb');
+        const user = await db.collection('users').findOne({ _id:new ObjectId(req.user.id) });
+        if (!user) return res.status(404).json({ error:'Usuario no encontrado' });
+        if (isVipAccount(user.email) && (!user.isVip||user.plan!=='premium')) {
+            await db.collection('users').updateOne({ _id:user._id },{ $set:{ isVip:true, plan:'premium' } });
+            user.isVip=true; user.plan='premium';
+        }
+        const planStatus = await getPlanStatus(user);
+        const msgsToday  = planStatus.plan==='free' ? await getMessagesToday(user._id.toString()) : null;
+        const resetsAt   = planStatus.plan==='free' ? (() => { const d=new Date(); d.setHours(24,0,0,0); return d; })() : null;
+        res.json({ user:sanitizeUser(user), plan:planStatus, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY, resetsAt });
+    } catch (e) { res.status(500).json({ error:'Error al obtener usuario' }); }
+});
+
+// PATCH /api/auth/profile
+app.patch('/api/auth/profile', requireAuth, async (req, res) => {
+    const { displayName, username } = req.body;
+    if (!db) return res.status(503).json({ error:'BD no disponible' });
+    try {
+        const { ObjectId } = require('mongodb');
+        const updates = { updatedAt:new Date() };
+        if (displayName!==undefined) {
+            if (!displayName.trim()) return res.status(400).json({ error:'Nombre no puede estar vacío' });
+            updates.displayName = displayName.trim().slice(0,50);
+        }
+        if (username!==undefined) {
+            if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) return res.status(400).json({ error:'Usuario inválido' });
+            const taken = await db.collection('users').findOne({ username:username.toLowerCase(), _id:{ $ne:new ObjectId(req.user.id) } });
+            if (taken) return res.status(409).json({ error:'Nombre de usuario en uso' });
+            updates.username = username.toLowerCase();
+        }
+        await db.collection('users').updateOne({ _id:new ObjectId(req.user.id) },{ $set:updates });
+        const user  = await db.collection('users').findOne({ _id:new ObjectId(req.user.id) });
+        const token = generateToken(user);
+        res.json({ token, user:sanitizeUser(user) });
+    } catch (e) { res.status(500).json({ error:'Error al actualizar perfil' }); }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  RUTAS PAGO
+// ══════════════════════════════════════════════════════════════════
+
+// GET /api/payment/info
+app.get('/api/payment/info', requireAuth, async (req, res) => {
+    const { ObjectId } = require('mongodb');
+    let user = null;
+    if (db) user = await db.collection('users').findOne({ _id:new ObjectId(req.user.id) });
+    const planStatus = user ? await getPlanStatus(user) : { plan:'free' };
+    res.json({
+        plan: planStatus.plan, isVip: planStatus.isVip||false, expiresAt: planStatus.expiresAt||null,
+        method:'PayPal', paypalTarget:Buffer.from(PAYPAL_EMAIL).toString('base64'),
+        amount:PLAN_PRICE.toFixed(2), currency:PLAN_CURRENCY, period:'mensual',
+        description:'NEXUS AI — Plan Premium Mensual ($10 USD/mes)'
+    });
+});
+
+// POST /api/payment/verify
+app.post('/api/payment/verify', requireAuth, async (req, res) => {
+    if (!checkRateLimit(req, res, 5, 60000)) return;
+    const { transactionId, payerEmail } = req.body;
+    if (!transactionId) return res.status(400).json({ error:'ID de transacción requerido' });
+    if (!db) return res.status(503).json({ error:'BD no disponible' });
+
+    const userId = req.user.id;
+    const txId   = transactionId.trim().toUpperCase();
+
+    try {
+        const { ObjectId } = require('mongodb');
+        const user = await db.collection('users').findOne({ _id:new ObjectId(userId) });
+
+        // VIP no necesita pago
+        if (user && (user.isVip||isVipAccount(user.email))) {
+            return res.json({ ok:true, plan:'premium', isVip:true, message:'Cuenta VIP — acceso permanente sin pago.' });
+        }
+
+        // Anti-fraude
+        const fraudCheck = await detectFraudPatterns(userId, txId, payerEmail?.toLowerCase(), req);
+        if (!fraudCheck.ok) {
+            await logFraud('payment_rejected',{ userId, transactionId:txId, reason:fraudCheck.reason },req);
+            return res.status(403).json({ error:fraudCheck.reason });
+        }
+
+        // Registrar tx usada
+        await db.collection('used_transactions').insertOne({ transactionId:txId, userId, ts:new Date() });
+
+        const planExpiresAt = new Date(Date.now() + PLAN_DURATION_MS);
+
+        await db.collection('payments').insertOne({
+            userId, transactionId:txId, amount:PLAN_PRICE, currency:PLAN_CURRENCY,
+            payerEmail:payerEmail?.toLowerCase()||'unknown', verified:true,
+            ip:getClientIP(req), planExpiresAt, ts:new Date()
+        });
+
+        await db.collection('users').updateOne(
+            { _id:new ObjectId(userId) },
+            { $set:{ plan:'premium', planExpiresAt, planExpired:false, lastPaymentAt:new Date() } }
+        );
+
+        console.log(`✅ Premium activado: ${user?.email} → hasta ${planExpiresAt.toISOString()}`);
+        res.json({ ok:true, plan:'premium', expiresAt:planExpiresAt, message:`¡Plan Premium activado! Válido hasta el ${planExpiresAt.toLocaleDateString('es')}.` });
+    } catch (e) {
+        if (e.code===11000) {
+            await logFraud('duplicate_tx_attempt',{ userId, transactionId:txId },req);
+            return res.status(409).json({ error:'Esta transacción ya fue registrada anteriormente.' });
+        }
+        console.error('[payment/verify]',e.message);
+        res.status(500).json({ error:'Error al verificar pago' });
+    }
+});
+
+// GET /api/payment/status
+app.get('/api/payment/status', requireAuth, async (req, res) => {
+    if (!db) return res.status(503).json({ error:'BD no disponible' });
+    try {
+        const { ObjectId } = require('mongodb');
+        const user = await db.collection('users').findOne({ _id:new ObjectId(req.user.id) });
+        if (!user) return res.status(404).json({ error:'Usuario no encontrado' });
+        const planStatus = await getPlanStatus(user);
+        const msgsToday  = planStatus.plan==='free' ? await getMessagesToday(req.user.id) : null;
+        const resetsAt   = planStatus.plan==='free' ? (() => { const d=new Date(); d.setHours(24,0,0,0); return d; })() : null;
+        res.json({ plan:planStatus, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY, resetsAt });
+    } catch (e) { res.status(500).json({ error:'Error' }); }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  CHAT
+// ══════════════════════════════════════════════════════════════════
+app.post('/api/chat', requireAuth, async (req, res) => {
+    if (!checkRateLimit(req, res, 60, 60000)) return;
+    const { message, conversationId, history } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error:'Mensaje vacío' });
+
+    const userId = req.user.id;
+    const { ObjectId } = require('mongodb');
+    const user = db ? await db.collection('users').findOne({ _id:new ObjectId(userId) }) : null;
+    const planStatus = user ? await getPlanStatus(user) : { plan:'free' };
+
+    if (planStatus.plan !== 'premium') {
+        const msgsToday = await getMessagesToday(userId);
+        if (msgsToday >= FREE_MSG_PER_DAY) {
+            const resetsAt = new Date(); resetsAt.setHours(24,0,0,0);
+            return res.status(402).json({
+                error:'limit_reached',
+                message:`Límite de ${FREE_MSG_PER_DAY} mensajes diarios gratuitos alcanzado. Se renueva a medianoche o actualiza a Premium ($10/mes).`,
+                messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY, resetsAt
+            });
+        }
+    }
 
     const convId = conversationId || `conv_${Date.now()}`;
-    console.log(`💬 [${convId.slice(-6)}] "${message.slice(0, 70)}"`);
+    console.log(`💬 [${convId.slice(-6)}] [${planStatus.plan}] "${message.slice(0,70)}"`);
 
     try {
-        // Búsqueda web previa si el mensaje claramente lo requiere
-        // (el brain también puede decidir buscar internamente)
         let searchResults = null;
-        const searchKeywords = ['busca', 'buscar', 'encuentra', 'información sobre', 'noticias de'];
-        const needsSearch = searchKeywords.some(kw => message.toLowerCase().includes(kw));
-        
-        if (needsSearch) {
-            const searchQuery = message.replace(/^(busca|buscar|encuentra|información sobre|info sobre|noticias de)\s+/i, '').trim();
-            console.log(`🔍 Pre-buscando: "${searchQuery}"`);
-            searchResults = await searchAll(searchQuery);
-            console.log(`   → ${searchResults.length} resultados`);
-            if (searchResults.length > 0) {
-                searchResults.forEach((r, i) => { r._position = i + 1; });
-            }
+        const skws = ['busca','buscar','encuentra','información sobre','noticias de'];
+        if (skws.some(kw=>message.toLowerCase().includes(kw))) {
+            const q=message.replace(/^(busca|buscar|encuentra|información sobre|info sobre|noticias de)\s+/i,'').trim();
+            searchResults = await searchAll(q);
+            searchResults.forEach((r,i)=>{ r._position=i+1; });
         }
-        
-        // Historial de conversación para contexto (máximo 8 turnos)
         const conversationHistory = Array.isArray(history) ? history.slice(-8) : [];
-        
-        // Procesar con el cerebro — puede tomarse el tiempo que necesite
         const thought = await brain.process(message, conversationHistory, searchResults);
+        const responseText = thought.response||thought.message||'Lo siento, no pude generar una respuesta.';
 
-        const responseText = thought.response || thought.message || 'Lo siento, no pude generar una respuesta en este momento.';
+        if (thought.neural_activity) brain._cachedStats = thought.neural_activity;
+        setTimeout(()=>{ brain.learn(message,responseText,true,searchResults||[]).catch(()=>{}); },100);
 
-        // Actualizar cache de stats con la actividad neural de esta respuesta
-        if (thought.neural_activity) {
-            brain._cachedStats = thought.neural_activity;
-        }
-
-        // Aprendizaje asíncrono en background
-        setTimeout(() => {
-            brain.learn(message, responseText, true, searchResults || []).catch(err => {
-                console.error('[Learn] Error:', err.message);
-            });
-        }, 100);
-
-        // Persistir en MongoDB
         if (db) {
             db.collection('messages').insertMany([
-                { conversationId: convId, role: 'user', content: message, ts: new Date() },
-                { conversationId: convId, role: 'assistant', content: responseText,
-                  neuralActivity: thought.neural_activity, llmUsed: thought.llm_used, ts: new Date() }
-            ]).catch(err => {
-                console.error('[MongoDB] Error guardando mensajes:', err.message);
-            });
+                { conversationId:convId, userId, role:'user', content:message, ts:new Date() },
+                { conversationId:convId, userId, role:'assistant', content:responseText, neuralActivity:thought.neural_activity, llmUsed:thought.llm_used, ts:new Date() }
+            ]).catch(()=>{});
         }
 
+        const msgsToday = planStatus.plan==='free' ? await getMessagesToday(userId) : null;
         res.json({
-            message:         responseText,
-            conversationId:  convId,
-            neuralActivity:  thought.neural_activity || {},
-            confidence:      thought.confidence || 0.8,
-            searchPerformed: !!searchResults && searchResults.length > 0,
-            resultsCount:    searchResults ? searchResults.length : 0,
-            intent:          thought.intent,
-            llmUsed:         thought.llm_used || false,
-            llmModel:        thought.llm_model || null,
-            processingTime:  thought.processing_time || null,
-            ts:              new Date().toISOString()
+            message:responseText, conversationId:convId, neuralActivity:thought.neural_activity||{},
+            confidence:thought.confidence||0.8, searchPerformed:!!searchResults?.length,
+            resultsCount:searchResults?.length||0, intent:thought.intent,
+            llmUsed:thought.llm_used||false, llmModel:thought.llm_model||null,
+            processingTime:thought.processing_time||null,
+            plan:planStatus.plan, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY,
+            ts:new Date().toISOString()
         });
-
     } catch (error) {
-        console.error('[/api/chat] Error:', error.message, error.stack);
-        res.status(500).json({
-            error: 'Error procesando mensaje',
-            message: 'Hubo un problema procesando tu mensaje. Por favor intenta de nuevo.',
-            conversationId: convId,
-            ts: new Date().toISOString()
-        });
+        console.error('[/api/chat]',error.message);
+        res.status(500).json({ error:'Error procesando mensaje', message:'Hubo un problema. Intenta de nuevo.', conversationId:convId, ts:new Date().toISOString() });
     }
 });
 
-// GET /api/search ─────────────────────────────────────────────────
 app.get('/api/search', async (req, res) => {
-    const { q: query } = req.query;
-    if (!query) return res.status(400).json({ error: 'Query requerido' });
-    
-    console.log(`🔍 Search directo: "${query}"`);
-    
+    const { q:query } = req.query;
+    if (!query) return res.status(400).json({ error:'Query requerido' });
     try {
-        const raw = await searchAll(query);
-        raw.forEach((r, i) => { r._position = i + 1; });
-        
-        const thought = await brain.process(query, [], raw.length ? raw : null);
-        
-        if (db) {
-            db.collection('searches').insertOne({ 
-                query, 
-                count: raw.length, 
-                ts: new Date() 
-            }).catch(err => {
-                console.error('[MongoDB] Error guardando búsqueda:', err.message);
-            });
-        }
-        
-        res.json({
-            query,
-            total:          thought.ranked_results?.length || raw.length,
-            results:        thought.ranked_results || raw,
-            neuralActivity: thought.neural_activity || {},
-            ts:             new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('[/api/search] Error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
+        const raw=await searchAll(query); raw.forEach((r,i)=>{r._position=i+1;});
+        const thought=await brain.process(query,[],raw.length?raw:null);
+        if (db) db.collection('searches').insertOne({ query,count:raw.length,ts:new Date() }).catch(()=>{});
+        res.json({ query,total:thought.ranked_results?.length||raw.length,results:thought.ranked_results||raw,neuralActivity:thought.neural_activity||{},ts:new Date().toISOString() });
+    } catch (error) { res.status(500).json({ error:error.message }); }
 });
 
-// POST /api/click ─────────────────────────────────────────────────
 app.post('/api/click', async (req, res) => {
-    const { query, url, position, dwellTime, bounced } = req.body;
-    if (!query || !url) return res.status(400).json({ error: 'Datos incompletos' });
-    
-    try {
-        await brain.click(query, url, position || 1, dwellTime || 0, bounced);
-        
-        if (db) {
-            db.collection('clicks').insertOne({ 
-                query, 
-                url, 
-                position, 
-                dwellTime, 
-                bounced, 
-                ts: new Date() 
-            }).catch(err => {
-                console.error('[MongoDB] Error guardando click:', err.message);
-            });
-        }
-        
-        res.json({ ok: true });
-    } catch (error) {
-        console.error('[/api/click] Error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
+    const { query,url,position,dwellTime,bounced } = req.body;
+    if (!query||!url) return res.status(400).json({ error:'Datos incompletos' });
+    try { await brain.click(query,url,position||1,dwellTime||0,bounced); if (db) db.collection('clicks').insertOne({ query,url,position,dwellTime,bounced,ts:new Date() }).catch(()=>{}); res.json({ ok:true }); }
+    catch (error) { res.status(500).json({ error:error.message }); }
 });
 
-// POST /api/feedback ──────────────────────────────────────────────
 app.post('/api/feedback', async (req, res) => {
-    const { message, response, helpful } = req.body;
-    if (!message) return res.status(400).json({ error: 'Datos incompletos' });
-    
-    try {
-        await brain.learn(message, response || '', helpful !== false);
-        res.json({ ok: true });
-    } catch (error) {
-        console.error('[/api/feedback] Error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
+    const { message,response,helpful } = req.body;
+    if (!message) return res.status(400).json({ error:'Datos incompletos' });
+    try { await brain.learn(message,response||'',helpful!==false); res.json({ ok:true }); }
+    catch (error) { res.status(500).json({ error:error.message }); }
 });
 
-// GET /api/stats ──────────────────────────────────────────────────
 app.get('/api/stats', async (req, res) => {
     try {
         const neural = await brain.getStats();
-        let dbStats  = {};
-        
+        let dbStats={};
         if (db) {
             try {
-                const [msgs, clicks, searches] = await Promise.all([
+                const [msgs,clicks,searches,users,premiumUsers] = await Promise.all([
                     db.collection('messages').countDocuments(),
                     db.collection('clicks').countDocuments(),
-                    db.collection('searches').countDocuments()
+                    db.collection('searches').countDocuments(),
+                    db.collection('users').countDocuments(),
+                    db.collection('users').countDocuments({ plan:'premium' })
                 ]);
-                dbStats = { messages: msgs, clicks, searches };
-            } catch (dbError) {
-                // No crítico
-            }
+                dbStats={ messages:msgs,clicks,searches,users,premiumUsers };
+            } catch (_) {}
         }
-        
-        res.json({
-            neural,
-            db:     dbStats,
-            server: { 
-                uptime:     Math.round(process.uptime()), 
-                restarts:   brain.restarts, 
-                port:       PORT,
-                brainReady: brain.ready
-            }
-        });
+        res.json({ neural,db:dbStats,server:{ uptime:Math.round(process.uptime()),restarts:brain.restarts,port:PORT,brainReady:brain.ready } });
     } catch (error) {
-        // Si falla, devolver lo que tenemos en cache sin error 500
-        if (brain._cachedStats) {
-            return res.json({
-                neural:  brain._cachedStats,
-                db:      {},
-                server:  { uptime: Math.round(process.uptime()), restarts: brain.restarts, port: PORT, brainReady: brain.ready },
-                cached:  true
-            });
-        }
-        res.status(500).json({ error: error.message });
+        if (brain._cachedStats) return res.json({ neural:brain._cachedStats,db:{},server:{ uptime:Math.round(process.uptime()),restarts:brain.restarts,port:PORT,brainReady:brain.ready },cached:true });
+        res.status(500).json({ error:error.message });
     }
 });
 
-// GET /health ─────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-    res.json({
-        status:     brain.ready ? 'ok' : 'initializing',
-        brainReady: brain.ready,
-        db:         db !== null,
-        restarts:   brain.restarts,
-        uptime:     process.uptime(),
-        ts:         new Date().toISOString()
-    });
+    res.json({ status:brain.ready?'ok':'initializing',brainReady:brain.ready,db:db!==null,restarts:brain.restarts,uptime:process.uptime(),ts:new Date().toISOString() });
 });
 
 // ══════════════════════════════════════════════════════════════════
 //  INICIO
 // ══════════════════════════════════════════════════════════════════
-
 async function start() {
     await connectDB();
-    
-    // Crear directorios necesarios
-    for (const d of ['models','data','logs','cache']) {
-        await fs.mkdir(path.join(__dirname, d), { recursive: true });
-    }
-    
+    for (const d of ['models','data','logs','cache']) await fs.mkdir(path.join(__dirname, d), { recursive:true });
+
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║   🧠  NEXUS v5.0 ENHANCED — IA con Caché Inteligente         ║
-║                                                               ║
-║   🌐  http://localhost:${PORT.toString().padEnd(46)}║
-║   ⚡  Caché multicapa + Analytics en tiempo real              ║
-║   🤖  6 Redes Neuronales (~248k parámetros)                   ║
-║   💾  MongoDB + Memoria episódica/semántica/working           ║
-║   📈  Backpropagation REAL + Aprendizaje continuo             ║
-║   🔥  LLM: Ollama/Groq con fallback inteligente               ║
-║                                                               ║
-║   ✅ Mejoras v5.0:                                            ║
-║     • Caché inteligente (response/embedding/search)           ║
-║     • Performance <3s (con caché <0.2s)                       ║
-║     • Analytics detallado y métricas                          ║
-║     • Filtro de errores repetitivos                           ║
-║     • Quality Network (6ta red neuronal)                      ║
-║     • Timeout optimizado (35s)                                ║
-║     • Sin bucles infinitos de errores                         ║
-║                                                               ║
-║   Creado por: Jhonatan David Castro Galvis                    ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
-        `);
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║   🧠  NEXUS v7.0 — Pagos Mensuales + Anti-Fraude + VIP          ║
+║                                                                  ║
+║   🌐  http://localhost:${PORT.toString().padEnd(47)}║
+║   💳  PayPal $${PLAN_PRICE}/mes · Reset automático a medianoche        ║
+║   🆓  Free: ${FREE_MSG_PER_DAY} msgs/día · 👑 VIP: ${VIP_ACCOUNTS.length} cuentas permanentes    ║
+║   🛡️   Anti-fraude: brute-force, IP flood, tx duplicada,         ║
+║       payer blacklist, multi-account, fake tx pattern           ║
+║                                                                  ║
+║   Creado por: Jhonatan David Castro Galvis                       ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝`);
 
-        // ══════════════════════════════════════════════════════════
-        //  SELF-PING — Mantiene el backend despierto en Render Free
-        //  Se llama a sí mismo cada 14 minutos via SELF_PING_URL
-        //  Configura en .env: SELF_PING_URL=https://tu-app.onrender.com
-        // ══════════════════════════════════════════════════════════
         const SELF_PING_URL = process.env.SELF_PING_URL;
-        const PING_INTERVAL  = 14 * 60 * 1000; // 14 minutos en ms
-
         if (SELF_PING_URL) {
-            console.log(`🏓 Self-ping activado → ${SELF_PING_URL}/health cada 14 min`);
-
-            const selfPing = async () => {
-                try {
-                    const pingUrl = `${SELF_PING_URL.replace(/\/$/, '')}/health`;
-                    const r = await axios.get(pingUrl, { timeout: 10000 });
-                    console.log(`🏓 Self-ping OK [${new Date().toISOString()}] status=${r.data?.status || r.status}`);
-                } catch (err) {
-                    console.warn(`⚠️  Self-ping falló [${new Date().toISOString()}]: ${err.message}`);
-                }
-            };
-
-            // Primer ping a los 30s de arrancar (el brain puede estar cargando aún)
-            setTimeout(selfPing, 30000);
-
-            // Luego cada 14 minutos indefinidamente
-            setInterval(selfPing, PING_INTERVAL);
-        } else {
-            console.log('ℹ️  Self-ping desactivado (SELF_PING_URL no definida en .env)');
+            const ping = async () => { try { await axios.get(`${SELF_PING_URL.replace(/\/$/,'')}/health`,{ timeout:10000 }); } catch {} };
+            setTimeout(ping, 30000);
+            setInterval(ping, 14 * 60 * 1000);
         }
-        // ══════════════════════════════════════════════════════════
     });
 }
 
-start().catch(err => {
-    console.error('❌ Error al iniciar servidor:', err);
-    process.exit(1);
-});
-
+start().catch(err => { console.error('❌ Error al iniciar:', err); process.exit(1); });
 module.exports = app;
