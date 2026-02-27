@@ -393,6 +393,37 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
 .ollama-local-info h4 { font-size:13px; font-weight:600; }
 .ollama-local-info p { font-size:12px; color:var(--text3); margin-top:2px; }
 
+/* ══ BRAIN VERSION BADGE ══ */
+.brain-ver-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:99px; font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; transition:all .3s; cursor:default; }
+.brain-ver-badge.base { background:rgba(96,165,250,0.1); border:1px solid rgba(96,165,250,0.25); color:#60A5FA; }
+.brain-ver-badge.ultra { background:linear-gradient(135deg,rgba(212,168,83,0.18),rgba(255,200,50,0.08)); border:1px solid rgba(212,168,83,0.4); color:var(--accent2); box-shadow:0 0 8px rgba(212,168,83,0.12); }
+.brain-ver-badge.creator { background:linear-gradient(135deg,rgba(255,215,0,0.2),rgba(212,168,83,0.1)); border:1px solid rgba(255,215,0,0.5); color:#FFD700; box-shadow:0 0 10px rgba(255,215,0,0.18); }
+.brain-ver-dot { width:5px; height:5px; border-radius:50%; background:currentColor; animation:pulse-dot 2s infinite; flex-shrink:0; }
+
+/* ══ WEEKLY PROMO MODAL ══ */
+.promo-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.72); z-index:8000; display:flex; align-items:flex-end; justify-content:center; opacity:0; visibility:hidden; transition:all .25s; backdrop-filter:blur(4px); }
+.promo-overlay.show { opacity:1; visibility:visible; }
+.promo-sheet { background:var(--bg2); border:1px solid rgba(212,168,83,0.2); border-radius:24px 24px 0 0; width:100%; max-width:720px; overflow:hidden; transform:translateY(40px); transition:transform .35s cubic-bezier(.34,1.2,.64,1); padding-bottom:env(safe-area-inset-bottom,0px); }
+.promo-overlay.show .promo-sheet { transform:translateY(0); }
+.promo-handle { width:36px; height:4px; border-radius:2px; background:rgba(255,255,255,0.12); margin:12px auto 0; }
+.promo-head { padding:20px 22px 0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.promo-head-left { flex:1; }
+.promo-head-left h2 { font-size:21px; font-weight:800; letter-spacing:-.02em; background:linear-gradient(135deg,#D4A853,#FFD700,#E8C074); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:4px; }
+.promo-head-left p { font-size:13px; color:var(--text2); line-height:1.5; }
+.promo-close { width:30px; height:30px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text3); flex-shrink:0; font-size:13px; line-height:1; }
+.promo-icon-wrap { text-align:center; padding:14px 0 6px; font-size:44px; }
+.promo-benefits { padding:0 22px 6px; display:flex; flex-direction:column; gap:6px; max-height:40vh; overflow-y:auto; }
+.promo-benefits::-webkit-scrollbar { width:3px; } .promo-benefits::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); }
+.promo-benefit { display:flex; align-items:flex-start; gap:10px; padding:9px 11px; background:var(--bg3); border:1px solid var(--border); border-radius:11px; }
+.promo-benefit-icon { font-size:16px; flex-shrink:0; margin-top:1px; }
+.promo-benefit-body h4 { font-size:12.5px; font-weight:700; color:var(--text); }
+.promo-benefit-body p { font-size:11px; color:var(--text3); line-height:1.4; margin-top:1px; }
+.promo-footer { padding:14px 22px 20px; display:flex; flex-direction:column; gap:8px; }
+.promo-cta { width:100%; padding:14px; background:linear-gradient(135deg,#D4A853,#E8C074); border:none; border-radius:12px; font-family:inherit; font-size:15px; font-weight:800; color:#0C0C0E; cursor:pointer; letter-spacing:.01em; transition:all .15s; box-shadow:0 4px 20px rgba(212,168,83,0.35); }
+.promo-cta:active { transform:scale(.97); }
+.promo-dismiss { text-align:center; font-size:12px; color:var(--text3); cursor:pointer; }
+.promo-dismiss:hover { color:var(--text2); }
+
 /* ══ PWA BANNER ══ */
 .pwa-banner { position:fixed; bottom:0; left:0; right:0; z-index:9000; background:linear-gradient(135deg,#1A1710,#0F0D09); border-top:1px solid rgba(212,168,83,0.25); padding:14px 18px; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px)); display:flex; align-items:center; gap:14px; transform:translateY(100%); transition:transform .4s cubic-bezier(.34,1.2,.64,1); box-shadow:0 -8px 32px rgba(0,0,0,0.5); }
 .pwa-banner.show { transform:translateY(0); }
@@ -511,6 +542,10 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
         <div class="brand-name">NEXUS</div>
         <div class="brand-sub" id="header-sub">Neural AI</div>
       </div>
+      <span class="brain-ver-badge base" id="brain-ver-badge" title="Versión del motor neural activo">
+        <span class="brain-ver-dot"></span>
+        <span id="brain-ver-label">Nexus Base</span>
+      </span>
     </div>
     <div class="header-right">
       <div class="thinking-pill" id="thinking-pill">
@@ -648,6 +683,17 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
         <div style="padding:0 16px 14px">
           <div id="profile-msg" style="display:none;font-size:12px;margin-bottom:10px;padding:8px 12px;border-radius:8px;"></div>
           <button class="profile-save-btn" id="profile-save-btn" onclick="saveProfile()">Guardar cambios</button>
+        </div>
+      </div>
+
+      <!-- MOTOR NEURAL INFO -->
+      <div class="profile-section" id="brain-info-card" style="margin-bottom:8px">
+        <div class="profile-section-head">
+          <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg>
+          Motor Neural Activo
+        </div>
+        <div style="padding:14px 16px" id="brain-info-body">
+          <!-- Actualizado por updateBrainInfoCard() -->
         </div>
       </div>
 
@@ -821,6 +867,99 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
   </div>
 </div>
 
+<!-- ═══ WEEKLY PROMO MODAL ═══ -->
+<div class="promo-overlay" id="promo-overlay" onclick="handlePromoOverlayClick(event)">
+  <div class="promo-sheet" id="promo-sheet">
+    <div class="promo-handle"></div>
+    <div class="promo-head">
+      <div class="promo-head-left">
+        <h2>⚡ Nexus Ultra te espera</h2>
+        <p>Desbloquea el cerebro más poderoso de NEXUS y lleva tu experiencia al siguiente nivel.</p>
+      </div>
+      <div class="promo-close" onclick="dismissPromoBanner()">✕</div>
+    </div>
+    <div class="promo-icon-wrap">🧠✨</div>
+    <div class="promo-benefits">
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🔥</div>
+        <div class="promo-benefit-body">
+          <h4>Cerebro Nexus Ultra (brain_vip.py)</h4>
+          <p>Motor neural con ~1.8M+ parámetros, el doble de potencia que el cerebro base.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">♾️</div>
+        <div class="promo-benefit-body">
+          <h4>Mensajes ilimitados</h4>
+          <p>Sin límites diarios. Conversa todo lo que necesites, sin interrupciones.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🧩</div>
+        <div class="promo-benefit-body">
+          <h4>7 redes neuronales activas</h4>
+          <p>Arquitectura ×2: capas y ancho duplicados para respuestas más profundas y precisas.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">💾</div>
+        <div class="promo-benefit-body">
+          <h4>Memoria episódica ampliada (200K episodios)</h4>
+          <p>NEXUS recuerda el doble de experiencias y conversaciones pasadas.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🎯</div>
+        <div class="promo-benefit-body">
+          <h4>Contexto de trabajo: 64 turnos</h4>
+          <p>Diálogos más largos y coherentes sin perder el hilo de la conversación.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🔍</div>
+        <div class="promo-benefit-body">
+          <h4>Búsqueda semántica avanzada</h4>
+          <p>28 patrones de extracción semántica vs 14 en el plan gratuito.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">⚡</div>
+        <div class="promo-benefit-body">
+          <h4>Aprendizaje 2× más agresivo</h4>
+          <p>El sistema aprende de tus conversaciones más rápido y con mayor precisión.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🏆</div>
+        <div class="promo-benefit-body">
+          <h4>Top-10 búsqueda episódica</h4>
+          <p>Recupera los 10 recuerdos más relevantes por consulta (vs 5 en el plan free).</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">💾</div>
+        <div class="promo-benefit-body">
+          <h4>Guardado más frecuente</h4>
+          <p>El cerebro guarda su estado cada 2 queries para máxima persistencia del aprendizaje.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🌟</div>
+        <div class="promo-benefit-body">
+          <h4>Soporte prioritario</h4>
+          <p>Acceso preferencial a nuevas funciones, mejoras y actualizaciones del sistema.</p>
+        </div>
+      </div>
+    </div>
+    <div class="promo-footer">
+      <button class="promo-cta" onclick="goToPremiumFromBanner()">
+        🚀 Activar Nexus Ultra — $10/mes
+      </button>
+      <div class="promo-dismiss" onclick="dismissPromoBanner()">No por ahora — recordar en 7 días</div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  PRELOADER
@@ -854,6 +993,7 @@ let currentPlanStatus = {};
 let messagesUsed = 0;
 let messagesLimit = 10;
 let resetsAt = null;
+let currentBrainVersion = 'base'; // 'base' | 'ultra'
 
 function getAuthHeaders() {
   return authToken ? { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
@@ -893,6 +1033,41 @@ function showApp() {
   detectOllama();
   setTimeout(() => fixHeight(), 100);
   document.getElementById('input')?.focus();
+  // Verificar banner semanal (sólo para usuarios free)
+  setTimeout(checkWeeklyPromoBanner, 3500);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  WEEKLY PROMO BANNER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const PROMO_LAST_SHOWN_KEY = 'nexus_promo_shown_at';
+const PROMO_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+function checkWeeklyPromoBanner() {
+  // No mostrar si ya es premium/vip
+  if (currentPlan === 'premium' || currentUser?.isVip) return;
+  const lastShown = parseInt(localStorage.getItem(PROMO_LAST_SHOWN_KEY) || '0', 10);
+  if (Date.now() - lastShown >= PROMO_INTERVAL_MS) {
+    showPromoBanner();
+  }
+}
+
+function showPromoBanner() {
+  document.getElementById('promo-overlay').classList.add('show');
+}
+
+function dismissPromoBanner() {
+  document.getElementById('promo-overlay').classList.remove('show');
+  localStorage.setItem(PROMO_LAST_SHOWN_KEY, Date.now().toString());
+}
+
+function handlePromoOverlayClick(e) {
+  if (e.target === document.getElementById('promo-overlay')) dismissPromoBanner();
+}
+
+function goToPremiumFromBanner() {
+  dismissPromoBanner();
+  switchMainTab('payment');
 }
 
 function updateHeaderSub() {
@@ -901,6 +1076,27 @@ function updateHeaderSub() {
   if (currentUser?.isVip) sub.textContent = '👑 VIP';
   else if (currentPlan === 'premium') sub.textContent = '✨ Premium';
   else sub.textContent = 'v7.0 · Free';
+  updateBrainVersionBadge();
+}
+
+function updateBrainVersionBadge() {
+  const badge = document.getElementById('brain-ver-badge');
+  const label = document.getElementById('brain-ver-label');
+  if (!badge || !label) return;
+
+  const isCreatorUser = currentUser?.isCreator || false;
+  const isPremium = currentPlan === 'premium';
+  const isVip = currentUser?.isVip || false;
+
+  // Determinar versión del cerebro activo
+  const useUltra = isCreatorUser || isVip || isPremium;
+  currentBrainVersion = useUltra ? 'ultra' : 'base';
+
+  badge.className = 'brain-ver-badge ' + (isCreatorUser ? 'creator' : useUltra ? 'ultra' : 'base');
+  label.textContent = isCreatorUser ? '👑 Creator' : useUltra ? 'Nexus Ultra' : 'Nexus Base';
+  badge.title = useUltra
+    ? 'Motor: Nexus Ultra (brain_vip.py) — ~1.8M parámetros, 7 redes neuronales'
+    : 'Motor: Nexus Base (brain.py) — Actualiza a Premium para Nexus Ultra';
 }
 
 function updateProfileUI() {
@@ -923,8 +1119,7 @@ function updateProfileUI() {
   const isPremium = (currentPlan === 'premium');
   const isVip     = currentUser.isVip || planObj.isVip;
 
-  if (isPremium) {
-    badge.className = isVip ? 'plan-badge vip' : 'plan-badge premium';
+  if (isPremium) {    badge.className = isVip ? 'plan-badge vip' : 'plan-badge premium';
     icon.textContent  = isVip ? '👑' : '⚡';
     pname.textContent = isVip ? 'VIP — Cuenta del Creador' : 'Plan Premium';
     pdesc.textContent = isVip ? 'Acceso permanente sin cobro' : 'Mensajes ilimitados · Acceso total';
@@ -1000,8 +1195,69 @@ function updateProfileUI() {
     alreadyPremium.style.display = 'none';
     paymentForm.style.display    = 'block';
   }
+  updateBrainInfoCard();
 }
 
+function updateBrainInfoCard() {
+  const el = document.getElementById('brain-info-body');
+  if (!el) return;
+  const isVip = currentUser?.isVip || currentPlanStatus?.isVip;
+  const isCreatorUser = currentUser?.isCreator || false;
+  const isPremium = currentPlan === 'premium';
+  const useUltra = isCreatorUser || isVip || isPremium;
+
+  if (useUltra) {
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span class="brain-ver-badge ${isCreatorUser ? 'creator' : 'ultra'}" style="font-size:10px;padding:3px 10px">
+          <span class="brain-ver-dot"></span>
+          <span>${isCreatorUser ? '👑 Creator Engine' : 'Nexus Ultra'}</span>
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.7">
+        <div>📄 <strong style="color:var(--text)">Script:</strong> brain_vip.py</div>
+        <div>🧩 <strong style="color:var(--text)">Redes neuronales:</strong> 7 (arquitectura ×2)</div>
+        <div>🔢 <strong style="color:var(--text)">Parámetros:</strong> ~1.8M+</div>
+        <div>💾 <strong style="color:var(--text)">Memoria episódica:</strong> 200,000 episodios</div>
+        <div>🎯 <strong style="color:var(--text)">Contexto de trabajo:</strong> 64 turnos</div>
+        <div>🔍 <strong style="color:var(--text)">Patrones semánticos:</strong> 28</div>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span class="brain-ver-badge base" style="font-size:10px;padding:3px 10px">
+          <span class="brain-ver-dot"></span>
+          <span>Nexus Base</span>
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.7">
+        <div>📄 <strong style="color:var(--text)">Script:</strong> brain.py</div>
+        <div>🧩 <strong style="color:var(--text)">Redes neuronales:</strong> 6</div>
+        <div>🔢 <strong style="color:var(--text)">Parámetros:</strong> ~250K+</div>
+        <div>💾 <strong style="color:var(--text)">Memoria episódica:</strong> 100,000 episodios</div>
+        <div>🎯 <strong style="color:var(--text)">Contexto de trabajo:</strong> 32 turnos</div>
+        <div>🔍 <strong style="color:var(--text)">Patrones semánticos:</strong> 14</div>
+      </div>
+      <button onclick="switchMainTab('payment')" style="margin-top:12px;width:100%;padding:9px;background:var(--accent-bg);border:1px solid rgba(212,168,83,0.25);border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer">
+        ⚡ Actualizar a Nexus Ultra — $10/mes
+      </button>`;
+  }
+}
+  const banner = document.getElementById('limit-banner');
+  if (currentPlan === 'free' && messagesUsed >= messagesLimit) {
+    banner.classList.add('show');
+    if (resetsAt) {
+      const r = new Date(resetsAt);
+      document.getElementById('limit-banner-text').textContent = `⚡ Límite de ${messagesLimit} mensajes diarios alcanzado. Se renueva a las ${r.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}. Actualiza a Premium para ilimitado.`;
+    }
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  LIMIT BANNER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function updateLimitBanner() {
   const banner = document.getElementById('limit-banner');
   if (currentPlan === 'free' && messagesUsed >= messagesLimit) {
@@ -1599,6 +1855,7 @@ async function sendMessage(preset) {
     if (data.messagesUsed !== undefined) messagesUsed = data.messagesUsed;
     if (data.plan) currentPlan = data.plan;
     if (data.resetsAt) resetsAt = data.resetsAt;
+    if (data.brainVersion) { currentBrainVersion = data.brainVersion; updateBrainVersionBadge(); }
     updateLimitBanner(); updateProfileUI();
 
     let finalMessage = data.message || data.response;
