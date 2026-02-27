@@ -578,7 +578,7 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
   <!-- Limit banner -->
   <div class="limit-banner" id="limit-banner">
     <div class="limit-banner-text" id="limit-banner-text">⚡ Límite diario alcanzado. Se renueva a medianoche. Actualiza a Premium para mensajes ilimitados.</div>
-    <button class="limit-upgrade-btn" onclick="switchMainTab('payment')">v9 APEX $10/mes</button>
+    <button class="limit-upgrade-btn" onclick="switchMainTab('payment')">Actualizar $10/mes</button>
   </div>
 
   <!-- ═══ TAB PANELS ═══ -->
@@ -702,6 +702,21 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
         Cerrar sesión
       </button>
+
+      <!-- Legal footer -->
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <a href="terminos-condiciones.html" target="_blank" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;font-weight:500;color:var(--text3);cursor:pointer;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(212,168,83,0.25)';this.style.color='var(--text2)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          Términos y Condiciones
+        </a>
+        <a href="politica-privacidad.html" target="_blank" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;font-weight:500;color:var(--text3);cursor:pointer;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(212,168,83,0.25)';this.style.color='var(--text2)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+          Política de Privacidad
+        </a>
+      </div>
+      <div style="text-align:center;margin-top:10px;font-size:10px;color:var(--text3);font-family:'IBM Plex Mono',monospace;letter-spacing:.03em">
+        NEXUS AI © 2026 · v1.0 · 🇨🇴 Colombia
+      </div>
     </div>
   </div>
 
@@ -723,17 +738,17 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
       <!-- Payment form -->
       <div id="payment-form-area">
         <div class="payment-hero">
-          <div class="payment-hero-icon">🧬</div>
-          <h2>NEXUS v9.0 APEX</h2>
-          <p>El cerebro más avanzado: redes neurales adaptativas, vocabulario infinito y aprendizaje real sin límites.</p>
+          <div class="payment-hero-icon">⚡</div>
+          <h2>Plan Premium</h2>
+          <p>Desbloquea NEXUS sin límites. Mensajes ilimitados, acceso total a la IA neural.</p>
         </div>
 
-          <div class="payment-features">
-          <div class="payment-feature"><div class="payment-feature-icon">🧬</div><div class="payment-feature-text"><h4>DynamicNeuralNet</h4><p>8 redes que crecen automáticamente hasta 3M parámetros</p></div></div>
-          <div class="payment-feature"><div class="payment-feature-icon">♾️</div><div class="payment-feature-text"><h4>InfiniteEmbeddings</h4><p>Vocabulario ilimitado, chunks de 10k palabras sin tope</p></div></div>
-          <div class="payment-feature"><div class="payment-feature-icon">🎯</div><div class="payment-feature-text"><h4>Búsqueda semántica real</h4><p>Cosine similarity con embeddings — entiende sinónimos</p></div></div>
-          <div class="payment-feature"><div class="payment-feature-icon">⚡</div><div class="payment-feature-text"><h4>3 pasadas de entrenamiento</h4><p>LR Scheduler automático + mensajes ilimitados</p></div></div>
-          </div>
+        <div class="payment-features">
+          <div class="payment-feature"><div class="payment-feature-icon">♾️</div><div class="payment-feature-text"><h4>Mensajes ilimitados</h4><p>Sin restricciones de uso diario o mensual</p></div></div>
+          <div class="payment-feature"><div class="payment-feature-icon">🧠</div><div class="payment-feature-text"><h4>IA Neural completa</h4><p>Acceso a todas las capacidades de aprendizaje</p></div></div>
+          <div class="payment-feature"><div class="payment-feature-icon">💾</div><div class="payment-feature-text"><h4>Historial persistente</h4><p>Todas tus conversaciones guardadas en la nube</p></div></div>
+          <div class="payment-feature"><div class="payment-feature-icon">🚀</div><div class="payment-feature-text"><h4>Prioridad máxima</h4><p>Respuestas más rápidas y sin interrupciones</p></div></div>
+        </div>
 
         <div class="payment-price">
           <div class="price-amount">$10.00</div>
@@ -873,46 +888,18 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
     <div class="promo-handle"></div>
     <div class="promo-head">
       <div class="promo-head-left">
-        <h2>🚀 NEXUS v9.0 APEX</h2>
-        <p>El cerebro más avanzado de NEXUS. Redes neurales que crecen solas, memoria sin límite y aprendizaje real.</p>
+        <h2>⚡ Nexus Ultra te espera</h2>
+        <p>Desbloquea el cerebro más poderoso de NEXUS y lleva tu experiencia al siguiente nivel.</p>
       </div>
       <div class="promo-close" onclick="dismissPromoBanner()">✕</div>
     </div>
-    <div class="promo-icon-wrap">🧬⚡</div>
+    <div class="promo-icon-wrap">🧠✨</div>
     <div class="promo-benefits">
       <div class="promo-benefit">
-        <div class="promo-benefit-icon">🧬</div>
+        <div class="promo-benefit-icon">🔥</div>
         <div class="promo-benefit-body">
-          <h4>DynamicNeuralNet — 8 redes que crecen solas</h4>
-          <p>Cuando una red detecta saturación, añade automáticamente un 25% más de neuronas. Presupuesto de hasta 3 millones de parámetros.</p>
-        </div>
-      </div>
-      <div class="promo-benefit">
-        <div class="promo-benefit-icon">♾️</div>
-        <div class="promo-benefit-body">
-          <h4>InfiniteEmbeddings — vocabulario sin límite</h4>
-          <p>El plan Free tiene tope de 16,384 n-gramas. APEX no tiene límite: crea nuevos chunks de 10k palabras automáticamente.</p>
-        </div>
-      </div>
-      <div class="promo-benefit">
-        <div class="promo-benefit-icon">🎯</div>
-        <div class="promo-benefit-body">
-          <h4>Búsqueda episódica por cosine similarity</h4>
-          <p>Comprende frases sinónimas aunque usen palabras distintas. El Free solo usa similitud Jaccard de palabras exactas.</p>
-        </div>
-      </div>
-      <div class="promo-benefit">
-        <div class="promo-benefit-icon">📉</div>
-        <div class="promo-benefit-body">
-          <h4>LR Scheduler automático</h4>
-          <p>Si una red se estanca 200 pasos, reduce su learning rate ×0.7 sola. Aprendizaje sin intervención manual, sin límites.</p>
-        </div>
-      </div>
-      <div class="promo-benefit">
-        <div class="promo-benefit-icon">⚡</div>
-        <div class="promo-benefit-body">
-          <h4>3 pasadas de entrenamiento por query</h4>
-          <p>El plan Free entrena 2 veces por consulta. APEX entrena 3 con el loss real realimentando el scheduler en cada pasada.</p>
+          <h4>Cerebro Nexus Ultra (brain_vip.py)</h4>
+          <p>Motor neural con ~1.8M+ parámetros, el doble de potencia que el cerebro base.</p>
         </div>
       </div>
       <div class="promo-benefit">
@@ -920,6 +907,55 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
         <div class="promo-benefit-body">
           <h4>Mensajes ilimitados</h4>
           <p>Sin límites diarios. Conversa todo lo que necesites, sin interrupciones.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🧩</div>
+        <div class="promo-benefit-body">
+          <h4>7 redes neuronales activas</h4>
+          <p>Arquitectura ×2: capas y ancho duplicados para respuestas más profundas y precisas.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">💾</div>
+        <div class="promo-benefit-body">
+          <h4>Memoria episódica ampliada (200K episodios)</h4>
+          <p>NEXUS recuerda el doble de experiencias y conversaciones pasadas.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🎯</div>
+        <div class="promo-benefit-body">
+          <h4>Contexto de trabajo: 64 turnos</h4>
+          <p>Diálogos más largos y coherentes sin perder el hilo de la conversación.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🔍</div>
+        <div class="promo-benefit-body">
+          <h4>Búsqueda semántica avanzada</h4>
+          <p>28 patrones de extracción semántica vs 14 en el plan gratuito.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">⚡</div>
+        <div class="promo-benefit-body">
+          <h4>Aprendizaje 2× más agresivo</h4>
+          <p>El sistema aprende de tus conversaciones más rápido y con mayor precisión.</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">🏆</div>
+        <div class="promo-benefit-body">
+          <h4>Top-10 búsqueda episódica</h4>
+          <p>Recupera los 10 recuerdos más relevantes por consulta (vs 5 en el plan free).</p>
+        </div>
+      </div>
+      <div class="promo-benefit">
+        <div class="promo-benefit-icon">💾</div>
+        <div class="promo-benefit-body">
+          <h4>Guardado más frecuente</h4>
+          <p>El cerebro guarda su estado cada 2 queries para máxima persistencia del aprendizaje.</p>
         </div>
       </div>
       <div class="promo-benefit">
@@ -932,7 +968,7 @@ body::after { content:''; position:fixed; top:-20%; left:50%; transform:translat
     </div>
     <div class="promo-footer">
       <button class="promo-cta" onclick="goToPremiumFromBanner()">
-        🚀 Activar Nexus v9 APEX — $10/mes
+        🚀 Activar Nexus Ultra — $10/mes
       </button>
       <div class="promo-dismiss" onclick="dismissPromoBanner()">No por ahora — recordar en 7 días</div>
     </div>
@@ -1054,7 +1090,7 @@ function updateHeaderSub() {
   if (!sub) return;
   if (currentUser?.isVip) sub.textContent = '👑 VIP';
   else if (currentPlan === 'premium') sub.textContent = '✨ Premium';
-  else sub.textContent = 'v8.0 · Free';
+  else sub.textContent = 'v7.0 · Free';
   updateBrainVersionBadge();
 }
 
@@ -1072,10 +1108,10 @@ function updateBrainVersionBadge() {
   currentBrainVersion = useUltra ? 'ultra' : 'base';
 
   badge.className = 'brain-ver-badge ' + (isCreatorUser ? 'creator' : useUltra ? 'ultra' : 'base');
-  label.textContent = isCreatorUser ? '👑 Creator' : useUltra ? 'v9 APEX' : 'v8 Free';
+  label.textContent = isCreatorUser ? '👑 Creator' : useUltra ? 'Nexus Ultra' : 'Nexus Base';
   badge.title = useUltra
-    ? 'Motor: Nexus v9 APEX — DynamicNeuralNet, hasta 3M parámetros, 8 redes adaptativas'
-    : 'Motor: Nexus v8 Free (brain.py) — Actualiza a Ultra para v9 APEX';
+    ? 'Motor: Nexus Ultra (brain_vip.py) — ~1.8M parámetros, 7 redes neuronales'
+    : 'Motor: Nexus Base (brain.py) — Actualiza a Premium para Nexus Ultra';
 }
 
 function updateProfileUI() {
@@ -1190,48 +1226,36 @@ function updateBrainInfoCard() {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <span class="brain-ver-badge ${isCreatorUser ? 'creator' : 'ultra'}" style="font-size:10px;padding:3px 10px">
           <span class="brain-ver-dot"></span>
-          <span>${isCreatorUser ? '👑 Creator Engine' : 'Nexus v9 APEX'}</span>
+          <span>${isCreatorUser ? '👑 Creator Engine' : 'Nexus Ultra'}</span>
         </span>
       </div>
       <div style="font-size:12px;color:var(--text2);line-height:1.7">
         <div>📄 <strong style="color:var(--text)">Script:</strong> brain_vip.py</div>
-        <div>🧬 <strong style="color:var(--text)">Redes neuronales:</strong> 8 DynamicNeuralNet (crecen automáticamente)</div>
-        <div>🔢 <strong style="color:var(--text)">Parámetros:</strong> hasta 3M (se expanden con el uso)</div>
-        <div>♾️ <strong style="color:var(--text)">InfiniteEmbeddings:</strong> sin límite de vocabulario</div>
-        <div>🎯 <strong style="color:var(--text)">Búsqueda episódica:</strong> cosine similarity (semántica real)</div>
-        <div>📉 <strong style="color:var(--text)">LR Scheduler:</strong> ajuste automático ×0.7 en estancamiento</div>
-        <div>⚡ <strong style="color:var(--text)">Entrenamientos por query:</strong> 3 pasadas</div>
+        <div>🧩 <strong style="color:var(--text)">Redes neuronales:</strong> 7 (arquitectura ×2)</div>
+        <div>🔢 <strong style="color:var(--text)">Parámetros:</strong> ~1.8M+</div>
+        <div>💾 <strong style="color:var(--text)">Memoria episódica:</strong> 200,000 episodios</div>
+        <div>🎯 <strong style="color:var(--text)">Contexto de trabajo:</strong> 64 turnos</div>
+        <div>🔍 <strong style="color:var(--text)">Patrones semánticos:</strong> 28</div>
       </div>`;
   } else {
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <span class="brain-ver-badge base" style="font-size:10px;padding:3px 10px">
           <span class="brain-ver-dot"></span>
-          <span>Nexus v8 Free</span>
+          <span>Nexus Base</span>
         </span>
       </div>
       <div style="font-size:12px;color:var(--text2);line-height:1.7">
         <div>📄 <strong style="color:var(--text)">Script:</strong> brain.py</div>
-        <div>🧩 <strong style="color:var(--text)">Redes neuronales:</strong> 8 (tamaño fijo)</div>
-        <div>🔢 <strong style="color:var(--text)">Parámetros:</strong> ~1.8M</div>
-        <div>💾 <strong style="color:var(--text)">Vocabulario:</strong> hasta 16,384 n-gramas</div>
-        <div>🔍 <strong style="color:var(--text)">Búsqueda episódica:</strong> similitud Jaccard</div>
-        <div>⚡ <strong style="color:var(--text)">Entrenamientos por query:</strong> 2 pasadas</div>
+        <div>🧩 <strong style="color:var(--text)">Redes neuronales:</strong> 6</div>
+        <div>🔢 <strong style="color:var(--text)">Parámetros:</strong> ~250K+</div>
+        <div>💾 <strong style="color:var(--text)">Memoria episódica:</strong> 100,000 episodios</div>
+        <div>🎯 <strong style="color:var(--text)">Contexto de trabajo:</strong> 32 turnos</div>
+        <div>🔍 <strong style="color:var(--text)">Patrones semánticos:</strong> 14</div>
       </div>
       <button onclick="switchMainTab('payment')" style="margin-top:12px;width:100%;padding:9px;background:var(--accent-bg);border:1px solid rgba(212,168,83,0.25);border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer">
-        ⚡ Actualizar a Nexus v9 APEX — $10/mes
+        ⚡ Actualizar a Nexus Ultra — $10/mes
       </button>`;
-  }
-}
-  const banner = document.getElementById('limit-banner');
-  if (currentPlan === 'free' && messagesUsed >= messagesLimit) {
-    banner.classList.add('show');
-    if (resetsAt) {
-      const r = new Date(resetsAt);
-      document.getElementById('limit-banner-text').textContent = `⚡ Límite de ${messagesLimit} mensajes diarios alcanzado. Se renueva a las ${r.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}. Actualiza a Premium para ilimitado.`;
-    }
-  } else {
-    banner.classList.remove('show');
   }
 }
 
