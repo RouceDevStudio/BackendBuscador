@@ -257,7 +257,13 @@ app.use(authMiddleware);
 //  PROCESO PYTHON (cerebro neural)
 // ══════════════════════════════════════════════════════════════════
 class BrainProcess {
-    constructor() {
+    /**
+     * @param {string} scriptName  nombre del archivo en /neural/ (ej. 'brain.py' | 'brain_vip.py')
+     * @param {string} label       etiqueta para logs
+     */
+    constructor(scriptName = 'brain.py', label = 'BASE') {
+        this.scriptName = scriptName;
+        this.label = label;
         this.proc = null; this.queue = []; this.ready = false;
         this.restarts = 0; this.stats = {}; this.requestCounter = 0;
         this.lastOllamaError = 0; this.ollamaErrorCount = 0;
@@ -266,9 +272,9 @@ class BrainProcess {
     }
 
     _start() {
-        const brainPath = path.join(__dirname, 'neural', 'brain.py');
+        const brainPath = path.join(__dirname, 'neural', this.scriptName);
         const env = { ...process.env, PYTHONUNBUFFERED: '1' };
-        console.log('🧠 Iniciando cerebro NEXUS...');
+        console.log(`🧠 Iniciando cerebro NEXUS [${this.label}] → ${this.scriptName}`);
         this.proc = spawn('python3', ['-u', brainPath], { env });
 
         let buffer = '';
@@ -315,7 +321,7 @@ class BrainProcess {
         });
 
         this.proc.on('close', (code) => {
-            console.warn(`⚠️  Brain cerró (code=${code}). Reiniciando...`);
+            console.warn(`⚠️  Brain [${this.label}] cerró (code=${code}). Reiniciando...`);
             this.ready = false;
             for (const p of this.queue) { clearTimeout(p.timeoutId); p.reject(new Error('Brain died')); }
             this.queue = []; this.restarts++;
@@ -364,9 +370,17 @@ class BrainProcess {
     shutdown() { if (this.proc) this.proc.kill('SIGTERM'); }
 }
 
-const brain = new BrainProcess();
-process.on('SIGTERM', () => { brain.shutdown(); if (db) db.client?.close(); process.exit(0); });
-process.on('SIGINT',  () => { brain.shutdown(); if (db) db.client?.close(); process.exit(0); });
+// ── Dos instancias del cerebro ─────────────────────────────────────
+// brainBase  → brain.py     (usuarios free)
+// brainVip   → brain_vip.py (premium / VIP / creador)
+const brainBase = new BrainProcess('brain.py',     'BASE');
+const brainVip  = new BrainProcess('brain_vip.py', 'ULTRA');
+
+// Alias de compatibilidad para rutas que no dependen del plan
+const brain = brainBase;
+
+process.on('SIGTERM', () => { brainBase.shutdown(); brainVip.shutdown(); if (db) db.client?.close(); process.exit(0); });
+process.on('SIGINT',  () => { brainBase.shutdown(); brainVip.shutdown(); if (db) db.client?.close(); process.exit(0); });
 
 // ══════════════════════════════════════════════════════════════════
 //  BÚSQUEDA WEB
@@ -700,6 +714,12 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
     console.log(`💬 [${convId.slice(-6)}] [${planStatus.plan}]${isCreator?' 👑 CREATOR':''} "${message.slice(0,70)}"`);
 
+    // ── Selección de cerebro según plan ──────────────────────────
+    const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
+    const activeBrain = useVipBrain ? brainVip : brainBase;
+    const brainVersion = useVipBrain ? 'ultra' : 'base';
+    console.log(`🔀 Cerebro activo: ${brainVersion.toUpperCase()} [${useVipBrain ? 'brain_vip.py' : 'brain.py'}]`);
+
     try {
         let searchResults = null;
         const skws = ['busca','buscar','encuentra','información sobre','noticias de'];
@@ -709,11 +729,11 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             searchResults.forEach((r,i)=>{ r._position=i+1; });
         }
         const conversationHistory = Array.isArray(history) ? history.slice(-8) : [];
-        const thought = await brain.process(message, conversationHistory, searchResults, userContext);
+        const thought = await activeBrain.process(message, conversationHistory, searchResults, userContext);
         const responseText = thought.response||thought.message||'Lo siento, no pude generar una respuesta.';
 
-        if (thought.neural_activity) brain._cachedStats = thought.neural_activity;
-        setTimeout(()=>{ brain.learn(message,responseText,true,searchResults||[]).catch(()=>{}); },100);
+        if (thought.neural_activity) activeBrain._cachedStats = thought.neural_activity;
+        setTimeout(()=>{ activeBrain.learn(message,responseText,true,searchResults||[]).catch(()=>{}); },100);
 
         if (db) {
             db.collection('messages').insertMany([
@@ -730,7 +750,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             llmUsed:thought.llm_used||false, llmModel:thought.llm_model||null,
             processingTime:thought.processing_time||null,
             plan:planStatus.plan, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY,
-            isCreator,
+            isCreator, brainVersion,
             ts:new Date().toISOString()
         });
     } catch (error) {
@@ -766,7 +786,7 @@ app.post('/api/feedback', async (req, res) => {
 
 app.get('/api/stats', async (req, res) => {
     try {
-        const neural = await brain.getStats();
+        const neural = await brainBase.getStats();
         let dbStats={};
         if (db) {
             try {
@@ -780,15 +800,25 @@ app.get('/api/stats', async (req, res) => {
                 dbStats={ messages:msgs,clicks,searches,users,premiumUsers };
             } catch (_) {}
         }
-        res.json({ neural,db:dbStats,server:{ uptime:Math.round(process.uptime()),restarts:brain.restarts,port:PORT,brainReady:brain.ready } });
+        res.json({
+            neural, db:dbStats,
+            server:{
+                uptime:Math.round(process.uptime()),
+                restarts:brainBase.restarts,
+                restartsVip:brainVip.restarts,
+                port:PORT,
+                brainReady:brainBase.ready,
+                brainVipReady:brainVip.ready
+            }
+        });
     } catch (error) {
-        if (brain._cachedStats) return res.json({ neural:brain._cachedStats,db:{},server:{ uptime:Math.round(process.uptime()),restarts:brain.restarts,port:PORT,brainReady:brain.ready },cached:true });
+        if (brainBase._cachedStats) return res.json({ neural:brainBase._cachedStats,db:{},server:{ uptime:Math.round(process.uptime()),restarts:brainBase.restarts,port:PORT,brainReady:brainBase.ready },cached:true });
         res.status(500).json({ error:error.message });
     }
 });
 
 app.get('/health', (req, res) => {
-    res.json({ status:brain.ready?'ok':'initializing',brainReady:brain.ready,db:db!==null,restarts:brain.restarts,uptime:process.uptime(),ts:new Date().toISOString() });
+    res.json({ status:brainBase.ready?'ok':'initializing',brainReady:brainBase.ready,brainVipReady:brainVip.ready,db:db!==null,restarts:brainBase.restarts,restartsVip:brainVip.restarts,uptime:process.uptime(),ts:new Date().toISOString() });
 });
 
 // ══════════════════════════════════════════════════════════════════
