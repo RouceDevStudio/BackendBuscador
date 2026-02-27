@@ -1818,6 +1818,7 @@ class NexusBrain:
         return desc
 
 
+    def _activity_report(self) -> dict:
         """Reporte de actividad neuronal"""
         ep_stats  = self.episodic.stats()
         sem_stats = self.semantic.stats()
