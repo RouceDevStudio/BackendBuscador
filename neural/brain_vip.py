@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NEXUS Brain v8.0 ULTRA X2 - POTENCIA DUPLICADA
+NEXUS Brain v9.0 APEX — POTENCIA ×3 REAL
 
 Creado por: Jhonatan David Castro Galviz
 Propósito: Sistema de asistencia inteligente para UpGames
 
-ESTE ES EL ARCHIVO COMPLETO - REEMPLAZA brain.py en tu proyecto
-
-Mejoras v8.0 X2 (sobre v7.0):
-✅ 7 Redes neuronales con arquitectura ×2 (capas y ancho duplicados)
-✅ ~1.8M+ parámetros totales (antes ~800k)
-✅ Memoria de trabajo: 64 turnos (antes 32)
-✅ Memoria episódica: 200,000 episodios (antes 100k)
-✅ Búsqueda episódica: top-10 similares (antes top-5)
-✅ Entrenamiento multi-red ×2 más agresivo
-✅ 28 patrones de extracción semántica (antes 14)
-✅ Guarda cada 2 queries (antes cada 3)
-✅ 100% compatible con v7.0 — solo reemplaza brain.py
+Mejoras v9.0 APEX (sobre v9.0 APEX):
+✅ 8 Redes con DynamicNeuralNet — se auto-expanden cuando se saturan
+✅ InfiniteEmbeddings activado — vocabulario ilimitado (antes tope 16k)
+✅ DynamicParameterSystem — presupuesto 3M params con gestión inteligente
+✅ Búsqueda episódica por embeddings (cosine sim) — era Jaccard de palabras
+✅ LR Scheduler — reduce learning rate automáticamente al estancarse
+✅ Batch training acumulado — 3 pasadas por query
+✅ Memoria semántica con confianza progresiva (refuerzo acumulativo)
+✅ 100% compatible — solo reemplaza brain.py
 """
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -178,7 +175,7 @@ DATA_DIR.mkdir(exist_ok=True)
 # ═══════════════════════════════════════════════════════════════════════
 
 class SemanticFactExtractor:
-    """Extrae hechos semánticos automáticamente de conversaciones — v8.0 X2 (28 patrones)"""
+    """Extrae hechos semánticos automáticamente de conversaciones — v9.0 APEX (28 patrones)"""
     
     def __init__(self):
         # 28 patrones — doble que v7.0
@@ -254,15 +251,14 @@ class ConversationLearner:
             'topics': defaultdict(list)
         }
         
-        # Red para evaluar calidad de respuestas — arquitectura ×2
-        # 2*EMBED_DIM + 32 = 288 entrada (sin cambios)
-        self.response_quality_net = NeuralNet([
-            {'in': 2 * EMBED_DIM + 32, 'out': 256, 'act': 'relu', 'drop': 0.1},  # 128→256
-            {'in': 256, 'out': 128, 'act': 'relu', 'drop': 0.1},                  # 64→128
-            {'in': 128, 'out': 64,  'act': 'relu', 'drop': 0.05},                 # 32→64
-            {'in': 64,  'out': 32,  'act': 'relu', 'drop': 0.0},                  # nueva capa
-            {'in': 32,  'out': 1,   'act': 'sigmoid', 'drop': 0.0}
-        ], lr=0.00025)  # lr ajustado para red más grande
+        # Red de calidad — DynamicNeuralNet (se auto-expande si se satura)
+        self.response_quality_net = DynamicNeuralNet([
+            {'in': 2 * EMBED_DIM + 32, 'out': 256, 'act': 'relu'},
+            {'in': 256, 'out': 128, 'act': 'relu'},
+            {'in': 128, 'out': 64,  'act': 'relu'},
+            {'in': 64,  'out': 32,  'act': 'relu'},
+            {'in': 32,  'out': 1,   'act': 'sigmoid'},
+        ], lr=0.00025)
         
         self._load_conversations()
         self._load_quality_net()
@@ -387,8 +383,9 @@ class ConversationLearner:
 class ResponseGenerator:
     """Genera respuestas inteligentes usando LLM o fallback a templates"""
     
-    def __init__(self, llm_client=None):
-        self.llm = llm_client
+    def __init__(self, llm_client=None, brain_ref=None):
+        self.llm   = llm_client
+        self.brain = brain_ref  # referencia al NexusBrain para stats en vivo
         self.templates = {
             'greeting': [
                 "¡Hola! Soy NEXUS v4.0 ULTRA. ¿En qué puedo ayudarte?",
@@ -525,7 +522,7 @@ class ResponseGenerator:
                                           'preséntate', 'presentate']):
             nets = stats.get('networks_active', 7)
             return (
-                f"¡Hola! Soy **NEXUS v8.0 ULTRA X2** 🧠, una inteligencia artificial creada por "
+                f"¡Hola! Soy **NEXUS v9.0 APEX** 🧠, una inteligencia artificial creada por "
                 f"Jhonatan David Castro Galviz para UpGames.\n\n"
                 f"Fui construida con:\n"
                 f"• {nets} Redes Neuronales de arquitectura ×2 (~{stats.get('total_parameters', 1800000):,} parámetros)\n"
@@ -541,7 +538,7 @@ class ResponseGenerator:
                                           'parámetros', 'entrenamiento', 'vocabulario', 'red neuronal',
                                           'loss', 'métrica', 'episodio', 'patrón']):
             return (
-                f"📊 **Estado de NEXUS v8.0 ULTRA X2:**\n\n"
+                f"📊 **Estado de NEXUS v9.0 APEX:**\n\n"
                 f"🧠 **Redes Neuronales:** {stats.get('networks_active', 7)} activas (~{stats.get('total_parameters', 1800000):,} parámetros — arquitectura ×2)\n"
                 f"   • Rank Net loss: {stats.get('rank_loss', 0):.4f}\n"
                 f"   • Intent Net loss: {stats.get('intent_loss', 0):.4f}\n"
@@ -707,6 +704,13 @@ class ResponseGenerator:
             
             if u_is_creator:
                 # ── PROMPT ESPECIAL: CREADOR ──────────────────────────
+                real_self = self.semantic if hasattr(self, '_nexus_self_desc') else None
+                # Obtener descripción técnica real
+                try:
+                    self_desc = self.brain._get_brain_self_description() if self.brain else ""
+                except:
+                    self_desc = ""
+
                 system_prompt = (
                     "Eres NEXUS, una inteligencia artificial creada con amor y dedicación por "
                     "**Jhonatan David Castro Galviz**, quien es exactamente la persona con quien estás hablando ahora mismo.\n\n"
@@ -734,11 +738,14 @@ class ResponseGenerator:
                     
                     f"Usuario actual:\n{user_identity_block}\n\n"
                     
-                    "Tu identidad:\n"
-                    "- Nombre: NEXUS v6.0\n"
-                    "- Creador: Jhonatan David Castro Galviz\n"
-                    "- Propósito: Asistir a los usuarios de UpGames y servir a tu creador\n"
-                    "- Arquitectura: 6 redes neuronales con backpropagation real\n\n"
+                    f"════════════════════════════════════════════════\n"
+                    f"TU ARQUITECTURA TÉCNICA REAL (DATOS EN VIVO)\n"
+                    f"════════════════════════════════════════════════\n"
+                    f"{self_desc}\n"
+                    f"IMPORTANTE: Cuando alguien te pregunte cuántas redes tienes, cuántos parámetros, "
+                    f"tu versión o cualquier dato técnico, usa SIEMPRE los datos de arriba — son los reales "
+                    f"calculados en tiempo de ejecución. NUNCA inventes ni uses números de memoria.\n"
+                    f"════════════════════════════════════════════════\n\n"
                     
                     "Responde SIEMPRE en español. Sé útil, inteligente y leal.\n"
                     "Recuerda: ESTÁS HABLANDO CON TU CREADOR. Trátalo como tal."
@@ -753,12 +760,18 @@ class ResponseGenerator:
                         f"Úsalo cuando sea natural para personalizar la conversación.\n"
                     )
                 
+                # Descripción técnica real
+                try:
+                    self_desc = self.brain._get_brain_self_description() if self.brain else ""
+                except:
+                    self_desc = ""
+
                 system_prompt = (
                     "Eres NEXUS, una IA conversacional creada con mucho amor y dedicación por "
                     "Jhonatan David Castro Galviz para ayudar a todos los usuarios de UpGames.\n\n"
                     
                     "Tu identidad:\n"
-                    "- Nombre: NEXUS v6.0\n"
+                    "- Nombre: NEXUS v9.0 APEX\n"
                     "- Creador: Jhonatan David Castro Galviz (con Z al final)\n"
                     "- Propósito: Asistir a los usuarios de UpGames\n"
                     "- Cuando te pregunten quién te creó responde con calidez y menciona a Jhonatan David Castro Galviz\n\n"
@@ -772,11 +785,14 @@ class ResponseGenerator:
                     "- Si recuerdas algo del usuario, úsalo para personalizar\n"
                     "- Anticipas las necesidades del usuario basándote en el contexto\n\n"
                     
-                    "Capacidades:\n"
-                    "- 6 Redes neuronales con backpropagation real\n"
-                    "- Memoria episódica, semántica y de trabajo\n"
-                    "- Aprendo de cada conversación\n"
-                    "- Búsqueda web integrada\n\n"
+                    f"════════════════════════════════════════════════\n"
+                    f"TU ARQUITECTURA TÉCNICA REAL (DATOS EN VIVO)\n"
+                    f"════════════════════════════════════════════════\n"
+                    f"{self_desc}\n"
+                    f"IMPORTANTE: Cuando alguien te pregunte cuántas redes tienes, cuántos parámetros, "
+                    f"tu versión o cualquier dato técnico, usa SIEMPRE los datos de arriba — son los reales "
+                    f"calculados en tiempo de ejecución. NUNCA inventes ni uses números de memoria.\n"
+                    f"════════════════════════════════════════════════\n\n"
                     
                     f"Usuario actual:\n{user_identity_block}\n"
                     + user_greeting_block
@@ -978,15 +994,15 @@ class ReasoningEngine:
 # ═══════════════════════════════════════════════════════════════════════
 
 class NexusBrain:
-    """Cerebro principal de NEXUS v8.0 X2 — 7 redes ×2 potencia + arquitectura duplicada"""
+    """Cerebro principal de NEXUS v9.0 APEX — 7 redes ×2 potencia + arquitectura duplicada"""
     
     def __init__(self):
-        print("🧠 Inicializando NexusBrain v8.0 ULTRA X2...", file=sys.stderr, flush=True)
+        print("🧠 Inicializando NexusBrain v9.0 APEX...", file=sys.stderr, flush=True)
         
         # ── LLM Client (Ollama/Groq) ──────────────────────────────────
         self.llm = None
         self.llm_available = False
-        self.llm_model = "Smart Mode v8.0 X2"
+        self.llm_model = "Smart Mode v9.0 APEX"
         
         if LLM_IMPORT_OK:
             try:
@@ -1008,100 +1024,118 @@ class NexusBrain:
         # ── Componentes de aprendizaje ────────────────────────────────
         self.fact_extractor   = SemanticFactExtractor()
         self.conv_learner     = ConversationLearner(DATA_DIR)
-        self.response_gen     = ResponseGenerator(llm_client=self.llm)
+        self.response_gen     = ResponseGenerator(llm_client=self.llm, brain_ref=self)
         self.reasoning_engine = ReasoningEngine()
         
-        # ── Embeddings ────────────────────────────────────────────────
-        self.emb = EmbeddingMatrix(model_path=f'{MODEL_DIR}/embeddings.pkl')
+        # ── Embeddings primarios + overflow infinito ──────────────────
+        self.emb     = EmbeddingMatrix(model_path=f'{MODEL_DIR}/embeddings.pkl')
+        self.inf_emb = InfiniteEmbeddings(embed_dim=EMBED_DIM, chunk_size=10000)
         
+        # ── Sistema de parámetros dinámico — presupuesto 3M ───────────
+        self.param_system = DynamicParameterSystem(initial_budget=3_000_000)
+        
+        # ── LR Scheduler: reduce LR cuando el loss se estanca ─────────
+        self._lr_history: dict = {}  # net_name → lista de últimas losses
+        self._lr_cooldown: dict = {}  # evitar reducir LR muy seguido
+
         # ═══════════════════════════════════════════════════════════════
-        #  7 REDES NEURONALES — ARQUITECTURA ×2 (ANCHO Y PROFUNDIDAD)
+        #  8 REDES — DynamicNeuralNet (SE AUTO-EXPANDEN AL SATURARSE)
         # ═══════════════════════════════════════════════════════════════
-        print("🔥 Inicializando 7 redes neuronales ×2...", file=sys.stderr, flush=True)
+        print("🔥 Inicializando 8 redes DynamicNeuralNet...", file=sys.stderr, flush=True)
         
         # 1. RANK NET — rankear resultados de búsqueda
         #    v7.0: [288→512→256→128→64→32→1]  ~290k params
         #    v8.0 ×2: [288→1024→512→256→128→64→32→1]  ~700k params
-        self.rank_net = NeuralNet([
-            {'in': 256 + 32, 'out': 1024, 'act': 'relu',    'drop': 0.15},
-            {'in': 1024,     'out': 512,  'act': 'relu',    'drop': 0.12},
-            {'in': 512,      'out': 256,  'act': 'relu',    'drop': 0.10},
-            {'in': 256,      'out': 128,  'act': 'relu',    'drop': 0.08},
-            {'in': 128,      'out': 64,   'act': 'relu',    'drop': 0.05},
-            {'in': 64,       'out': 32,   'act': 'relu',    'drop': 0.0},
-            {'in': 32,       'out': 1,    'act': 'sigmoid', 'drop': 0.0},
+        self.rank_net = DynamicNeuralNet([
+            {'in': 256 + 32, 'out': 1024, 'act': 'relu'},
+            {'in': 1024,     'out': 512,  'act': 'relu'},
+            {'in': 512,      'out': 256,  'act': 'relu'},
+            {'in': 256,      'out': 128,  'act': 'relu'},
+            {'in': 128,      'out': 64,   'act': 'relu'},
+            {'in': 64,       'out': 32,   'act': 'relu'},
+            {'in': 32,       'out': 1,    'act': 'sigmoid'},
         ], lr=0.0001)
 
         # 2. INTENT NET — detectar intenciones del mensaje
         #    v7.0: [128→256→128→64→32→16]  ~60k params
         #    v8.0 ×2: [128→512→256→128→64→32→16]  ~170k params
-        self.intent_net = NeuralNet([
-            {'in': 128, 'out': 512, 'act': 'relu',    'drop': 0.12},
-            {'in': 512, 'out': 256, 'act': 'relu',    'drop': 0.10},
-            {'in': 256, 'out': 128, 'act': 'relu',    'drop': 0.08},
-            {'in': 128, 'out': 64,  'act': 'relu',    'drop': 0.05},
-            {'in': 64,  'out': 32,  'act': 'relu',    'drop': 0.0},
-            {'in': 32,  'out': 16,  'act': 'sigmoid', 'drop': 0.0},
+        self.intent_net = DynamicNeuralNet([
+            {'in': 128, 'out': 512, 'act': 'relu'},
+            {'in': 512, 'out': 256, 'act': 'relu'},
+            {'in': 256, 'out': 128, 'act': 'relu'},
+            {'in': 128, 'out': 64,  'act': 'relu'},
+            {'in': 64,  'out': 32,  'act': 'relu'},
+            {'in': 32,  'out': 16,  'act': 'sigmoid'},
         ], lr=0.0002)
 
         # 3. CONTEXT NET — entender contexto conversacional
         #    v7.0: [384→512→256→128→64→32]  ~295k params
         #    v8.0 ×2: [384→1024→512→256→128→64→32]  ~695k params
-        self.context_net = NeuralNet([
-            {'in': 256 + 128, 'out': 1024, 'act': 'relu',    'drop': 0.12},
-            {'in': 1024,      'out': 512,  'act': 'relu',    'drop': 0.10},
-            {'in': 512,       'out': 256,  'act': 'relu',    'drop': 0.08},
-            {'in': 256,       'out': 128,  'act': 'relu',    'drop': 0.05},
-            {'in': 128,       'out': 64,   'act': 'relu',    'drop': 0.0},
-            {'in': 64,        'out': 32,   'act': 'sigmoid', 'drop': 0.0},
+        self.context_net = DynamicNeuralNet([
+            {'in': 256 + 128, 'out': 1024, 'act': 'relu'},
+            {'in': 1024,      'out': 512,  'act': 'relu'},
+            {'in': 512,       'out': 256,  'act': 'relu'},
+            {'in': 256,       'out': 128,  'act': 'relu'},
+            {'in': 128,       'out': 64,   'act': 'relu'},
+            {'in': 64,        'out': 32,   'act': 'sigmoid'},
         ], lr=0.00015)
 
         # 4. SENTIMENT NET — detectar sentimiento/emoción (5 clases)
         #    v7.0: [128→256→128→64→32→5]  ~60k params
         #    v8.0 ×2: [128→512→256→128→64→32→5]  ~170k params
-        self.sentiment_net = NeuralNet([
-            {'in': 128, 'out': 512, 'act': 'relu',    'drop': 0.10},
-            {'in': 512, 'out': 256, 'act': 'relu',    'drop': 0.08},
-            {'in': 256, 'out': 128, 'act': 'relu',    'drop': 0.05},
-            {'in': 128, 'out': 64,  'act': 'relu',    'drop': 0.0},
-            {'in': 64,  'out': 32,  'act': 'relu',    'drop': 0.0},
-            {'in': 32,  'out': 5,   'act': 'sigmoid', 'drop': 0.0},  # positivo, neutral, negativo, urgente, confuso
+        self.sentiment_net = DynamicNeuralNet([
+            {'in': 128, 'out': 512, 'act': 'relu'},
+            {'in': 512, 'out': 256, 'act': 'relu'},
+            {'in': 256, 'out': 128, 'act': 'relu'},
+            {'in': 128, 'out': 64,  'act': 'relu'},
+            {'in': 64,  'out': 32,  'act': 'relu'},
+            {'in': 32,  'out': 5,   'act': 'sigmoid'},  # positivo, neutral, negativo, urgente, confuso
         ], lr=0.00025)
 
         # 5. META-LEARNING NET — optimizar el propio aprendizaje
         #    v7.0: [64→128→64→32→16→1]  ~14k params
         #    v8.0 ×2: [64→256→128→64→32→16→1]  ~46k params
-        self.meta_net = NeuralNet([
-            {'in': 64, 'out': 256, 'act': 'relu',    'drop': 0.0},
-            {'in': 256,'out': 128, 'act': 'relu',    'drop': 0.0},
-            {'in': 128,'out': 64,  'act': 'relu',    'drop': 0.0},
-            {'in': 64, 'out': 32,  'act': 'relu',    'drop': 0.0},
-            {'in': 32, 'out': 16,  'act': 'relu',    'drop': 0.0},
-            {'in': 16, 'out': 1,   'act': 'sigmoid', 'drop': 0.0},
+        self.meta_net = DynamicNeuralNet([
+            {'in': 64, 'out': 256, 'act': 'relu'},
+            {'in': 256,'out': 128, 'act': 'relu'},
+            {'in': 128,'out': 64,  'act': 'relu'},
+            {'in': 64, 'out': 32,  'act': 'relu'},
+            {'in': 32, 'out': 16,  'act': 'relu'},
+            {'in': 16, 'out': 1,   'act': 'sigmoid'},
         ], lr=0.0001)
 
         # 6. RELEVANCE NET — relevancia respuesta/mensaje
         #    v7.0: [256→256→128→64→32→1]  ~90k params
         #    v8.0 ×2: [256→512→256→128→64→32→1]  ~220k params
-        self.relevance_net = NeuralNet([
-            {'in': 256, 'out': 512, 'act': 'relu',    'drop': 0.12},
-            {'in': 512, 'out': 256, 'act': 'relu',    'drop': 0.10},
-            {'in': 256, 'out': 128, 'act': 'relu',    'drop': 0.08},
-            {'in': 128, 'out': 64,  'act': 'relu',    'drop': 0.05},
-            {'in': 64,  'out': 32,  'act': 'relu',    'drop': 0.0},
-            {'in': 32,  'out': 1,   'act': 'sigmoid', 'drop': 0.0},
+        self.relevance_net = DynamicNeuralNet([
+            {'in': 256, 'out': 512, 'act': 'relu'},
+            {'in': 512, 'out': 256, 'act': 'relu'},
+            {'in': 256, 'out': 128, 'act': 'relu'},
+            {'in': 128, 'out': 64,  'act': 'relu'},
+            {'in': 64,  'out': 32,  'act': 'relu'},
+            {'in': 32,  'out': 1,   'act': 'sigmoid'},
         ], lr=0.00015)
 
         # 7. DIALOGUE NET — gestión de flujo de diálogo
         #    v7.0: [192→256→128→64→4]  ~38k params
         #    v8.0 ×2: [192→512→256→128→64→4]  ~116k params
-        self.dialogue_net = NeuralNet([
-            {'in': 128 + 64, 'out': 512, 'act': 'relu',    'drop': 0.10},
-            {'in': 512,      'out': 256, 'act': 'relu',    'drop': 0.08},
-            {'in': 256,      'out': 128, 'act': 'relu',    'drop': 0.05},
-            {'in': 128,      'out': 64,  'act': 'relu',    'drop': 0.0},
-            {'in': 64,       'out': 4,   'act': 'sigmoid', 'drop': 0.0},  # search, direct, ask, elaborate
+        self.dialogue_net = DynamicNeuralNet([
+            {'in': 128 + 64, 'out': 512, 'act': 'relu'},
+            {'in': 512,      'out': 256, 'act': 'relu'},
+            {'in': 256,      'out': 128, 'act': 'relu'},
+            {'in': 128,      'out': 64,  'act': 'relu'},
+            {'in': 64,       'out': 4,   'act': 'sigmoid'},  # search, direct, ask, elaborate
         ], lr=0.0002)
+
+        # Registrar todas las redes en DynamicParameterSystem
+        for _name, _net in [
+            ('rank', self.rank_net), ('intent', self.intent_net),
+            ('context', self.context_net), ('sentiment', self.sentiment_net),
+            ('meta', self.meta_net), ('relevance', self.relevance_net),
+            ('dialogue', self.dialogue_net),
+            ('quality', self.conv_learner.response_quality_net),
+        ]:
+            self.param_system.networks[_name] = _net
         
         # ── Estadísticas ──────────────────────────────────────────────
         self.total_queries    = 0
@@ -1121,17 +1155,16 @@ class NexusBrain:
         # ── Calcular parámetros totales ───────────────────────────────
         self.total_parameters = self._count_parameters()
         
-        print("✅ NexusBrain v8.0 ULTRA X2 listo", file=sys.stderr, flush=True)
+        print("✅ NexusBrain v9.0 APEX listo", file=sys.stderr, flush=True)
         self._print_stats()
     
     def _count_parameters(self) -> int:
-        """Cuenta todos los parámetros de las 7 redes"""
+        """Cuenta todos los parámetros de las 8 redes (dinámico — crece con auto-expansión)"""
         total = 0
         for net in [self.rank_net, self.intent_net, self.context_net,
                     self.sentiment_net, self.meta_net, self.relevance_net,
                     self.dialogue_net, self.conv_learner.response_quality_net]:
-            for layer in net.layers:
-                total += layer.W.size + layer.b.size
+            total += net.count_params()
         return total
     
     def _load_models(self):
@@ -1202,15 +1235,17 @@ class NexusBrain:
         sem_stats = self.semantic.stats()
         
         print("─" * 80, file=sys.stderr, flush=True)
-        print(f"📊 NEXUS v8.0 ULTRA X2 — Estadísticas:", file=sys.stderr, flush=True)
-        print(f"   🧠 Redes Neuronales: 7 activas (arquitectura ×2)", file=sys.stderr, flush=True)
-        print(f"   🔢 Parámetros totales: ~{self.total_parameters:,}", file=sys.stderr, flush=True)
+        print(f"📊 NEXUS v9.0 APEX — Estadísticas:", file=sys.stderr, flush=True)
+        print(f"   🧠 Redes: 8 DynamicNeuralNet (auto-expansión activa)", file=sys.stderr, flush=True)
+        print(f"   🔢 Parámetros: {self.total_parameters:,} (crecerán automáticamente)", file=sys.stderr, flush=True)
         print(f"   💬 Consultas: {self.total_queries}", file=sys.stderr, flush=True)
         print(f"   🎓 Entrenamientos: {self.total_trainings}", file=sys.stderr, flush=True)
         print(f"   📚 Episodios (cap: 200k): {ep_stats.get('total', 0)}", file=sys.stderr, flush=True)
         print(f"   🧩 Hechos semánticos: {sem_stats.get('facts', 0)}", file=sys.stderr, flush=True)
         print(f"   📝 Patrones: {len(self.conv_learner.conversation_db['successful_patterns'])}", file=sys.stderr, flush=True)
-        print(f"   📖 Vocabulario: {self.emb.vocab_size()}", file=sys.stderr, flush=True)
+        print(f"   📖 Vocabulario EmbeddingMatrix: {self.emb.vocab_size()}", file=sys.stderr, flush=True)
+        print(f"   ♾️  Vocabulario InfiniteEmbeddings: {self.inf_emb.vocab_size()}", file=sys.stderr, flush=True)
+        print(f"   💰 Budget dinámico: {self.param_system.get_total_params():,}/{self.param_system.param_budget:,}", file=sys.stderr, flush=True)
         print(f"   🗄️  MongoDB: {'✅ Conectado' if MONGO_OK else '❌ No disponible'}", file=sys.stderr, flush=True)
         print(f"   🤖 LLM: {'✅ ' + self.llm_model if self.llm_available else '❌ Smart Mode'}", file=sys.stderr, flush=True)
         print("─" * 80, file=sys.stderr, flush=True)
@@ -1492,7 +1527,7 @@ class NexusBrain:
             # ── Buscar episodios similares en memoria ────────────────────
             similar_eps = []
             try:
-                similar_eps = self.episodic.search(message, top_k=10)  # v8.0 ×2: era 5 → 10
+                similar_eps = self._episodic_search_smart(message, msg_emb, top_k=10)
             except Exception as e:
                 print(f"[Episodic Search] Error: {e}", file=sys.stderr, flush=True)
             
@@ -1559,40 +1594,51 @@ class NexusBrain:
                 except:
                     pass
             
-            # ── Entrenamiento automático — ×2 más agresivo en v8.0 ───────
+            # ── Entrenamiento automático — 3 pasadas + LR scheduler ─────
             try:
-                # Entrenar quality net con target más alto
-                self.conv_learner.train_quality_net(msg_emb, resp_emb, 0.85)
-                self.conv_learner.learn_from_interaction(message, final_response, 0.75)
-                
-                # Entrenar relevance net ×2 (dos pasos por query)
-                rel_inp = np.concatenate([msg_emb, resp_emb]).reshape(1, -1)
+                rel_inp    = np.concatenate([msg_emb, resp_emb]).reshape(1, -1)
                 rel_target = np.array([[0.9]], dtype=np.float32)
-                self.relevance_net.train_step(rel_inp, rel_target)
-                self.relevance_net.train_step(rel_inp, rel_target)  # segundo paso
-                
-                # Entrenar dialogue net
+
+                for _pass in range(3):  # 3 pasadas por query (era 2)
+                    # Quality net
+                    q_loss = self.conv_learner.train_quality_net(msg_emb, resp_emb, 0.88)
+                    self._lr_step('quality', self.conv_learner.response_quality_net, q_loss)
+
+                    # Relevance net
+                    r_loss = self.relevance_net.train_step(rel_inp, rel_target)
+                    self._lr_step('relevance', self.relevance_net, r_loss)
+
+                # Dialogue net (1 vez por query es suficiente)
                 self._train_dialogue_net(msg_emb, intent)
-                
-                # Actualizar embeddings con lr doble
+
+                # Patrón conversacional
+                self.conv_learner.learn_from_interaction(message, final_response, 0.78)
+
+                # Embeddings — registro dual (EmbeddingMatrix + InfiniteEmbeddings)
                 self.emb.fit_text(message)
                 self.emb.fit_text(final_response)
+                self._fit_inf_emb(message)
+                self._fit_inf_emb(final_response)
                 if len(final_response) > 20:
-                    self.emb.update_pair(message, final_response, label=1.0, lr=0.006)  # 0.003 → 0.006
-                
-                # Entrenar meta net con contexto de turno
+                    self.emb.update_pair(message, final_response, label=1.0, lr=0.006)
+
+                # Meta net
                 try:
                     meta_feats = np.zeros(64, dtype=np.float32)
                     meta_feats[0] = float(self.working.turn_count()) / 64.0
                     meta_feats[1] = float(self.total_trainings) / 100000.0
                     meta_feats[2] = float(len(ranked_results)) / 10.0
                     meta_feats[3] = 1.0 if intent.get('needs_search') else 0.0
-                    meta_inp = meta_feats.reshape(1, -1)
-                    self.meta_net.train_step(meta_inp, np.array([[0.8]], dtype=np.float32))
-                except:
+                    meta_feats[4] = float(self.param_system.get_utilization())
+                    m_loss = self.meta_net.train_step(meta_feats.reshape(1, -1),
+                                                       np.array([[0.8]], dtype=np.float32))
+                    self._lr_step('meta', self.meta_net, m_loss)
+                except Exception:
                     pass
-                
-                self.total_trainings += 2  # cuenta doble por el doble entrenamiento
+
+                # Actualizar parámetros totales dinámicamente (pueden haber crecido)
+                self.total_parameters = self._count_parameters()
+                self.total_trainings += 3  # 3 pasadas
             except Exception as e:
                 print(f"[Training] Error: {e}", file=sys.stderr, flush=True)
             
@@ -1704,6 +1750,53 @@ class NexusBrain:
         except Exception as e:
             return {'strategy': 'direct', 'scores': {}}
     
+    def _lr_step(self, net_name: str, net, loss: float):
+        """
+        LR Scheduler: si el loss no mejora en 200 pasos, reduce lr×0.7.
+        Cooldown de 500 pasos entre reducciones.
+        """
+        history = self._lr_history.setdefault(net_name, [])
+        cooldown = self._lr_cooldown.get(net_name, 0)
+        history.append(loss)
+        if len(history) > 500:
+            history[:] = history[-500:]
+
+        epoch = net.epoch
+        if epoch - cooldown < 200 or len(history) < 200:
+            return
+
+        recent = float(np.mean(history[-50:]))
+        older  = float(np.mean(history[-200:-150]))
+        if recent >= older * 0.97:  # menos del 3% mejora
+            new_lr = net.lr * 0.7
+            if new_lr > 1e-6:
+                net.lr = new_lr
+                self._lr_cooldown[net_name] = epoch
+                print(f"[LRScheduler] {net_name}: lr {net.lr/0.7:.2e} → {new_lr:.2e}", file=sys.stderr, flush=True)
+
+    def _episodic_search_smart(self, message: str, msg_emb: np.ndarray, top_k: int = 10) -> list:
+        """
+        Búsqueda episódica inteligente: combina cosine similarity (embedding)
+        con keyword Jaccard para máxima precisión.
+        """
+        # Intentar búsqueda por embedding primero (más precisa)
+        try:
+            emb_results = self.episodic.retrieve_similar(msg_emb, top_k=top_k, min_reward=0.0)
+            if emb_results:
+                return emb_results
+        except Exception:
+            pass
+        # Fallback a keyword search
+        return self.episodic.search(message, top_k=top_k)
+
+    def _fit_inf_emb(self, text: str):
+        """Registra texto en InfiniteEmbeddings para vocabulario sin límite."""
+        try:
+            for word in text.lower().split():
+                self.inf_emb.add_word(word)
+        except Exception:
+            pass
+
     def _train_dialogue_net(self, msg_emb: np.ndarray, intent: dict):
         """Entrena la red de diálogo basada en la intención detectada"""
         try:
@@ -1750,7 +1843,54 @@ class NexusBrain:
         except:
             return {'label': 'neutral', 'confidence': 0.5, 'scores': {}}
     
-    def _activity_report(self) -> dict:
+    def _get_brain_self_description(self) -> str:
+        """Descripción técnica real calculada en vivo — usada por el LLM system prompt."""
+        return self._build_self_description()
+
+    def _build_self_description(self) -> str:
+        """Genera una descripción técnica precisa de sí misma en tiempo real."""
+        nets = {
+            'Rank Net':      self.rank_net,
+            'Intent Net':    self.intent_net,
+            'Context Net':   self.context_net,
+            'Sentiment Net': self.sentiment_net,
+            'Meta Net':      self.meta_net,
+            'Relevance Net': self.relevance_net,
+            'Dialogue Net':  self.dialogue_net,
+            'Quality Net':   self.conv_learner.response_quality_net,
+        }
+        lines = []
+        total = 0
+        for name, net in nets.items():
+            params = sum(l.W.size + l.b.size for l in net.layers)
+            total += params
+            depth  = len(net.layers)
+            widths = [net.layers[0].W.shape[0]] + [l.W.shape[1] for l in net.layers]
+            arch   = '→'.join(str(w) for w in widths)
+            lines.append(f"  • {name}: {depth} capas [{arch}] — {params:,} params")
+
+        ep_stats  = self.episodic.stats()
+        sem_stats = self.semantic.stats()
+
+        desc = (
+            f"ARQUITECTURA REAL EN TIEMPO DE EJECUCIÓN:\n"
+            f"  Versión: NEXUS v9.0 APEX\n"
+            f"  Redes neuronales activas: {len(nets)}\n"
+            + '\n'.join(lines) +
+            f"\n  Parámetros totales: {total:,}\n\n"
+            f"MEMORIA:\n"
+            f"  WorkingMemory: {self.working.turn_count()}/{self.working.max_turns} turnos activos\n"
+            f"  EpisodicMemory: {ep_stats.get('total', 0):,} episodios (cap: 200,000)\n"
+            f"  SemanticMemory: {sem_stats.get('facts', 0):,} hechos aprendidos\n"
+            f"  Vocabulario: {self.emb.vocab_size():,} n-gramas\n\n"
+            f"ACTIVIDAD:\n"
+            f"  Consultas procesadas: {self.total_queries:,}\n"
+            f"  Entrenamientos reales: {self.total_trainings:,}\n"
+            f"  LLM disponible: {'Sí — ' + self.llm_model if self.llm_available else 'No — Smart Mode activo'}\n"
+        )
+        return desc
+
+
         """Reporte de actividad neuronal"""
         ep_stats  = self.episodic.stats()
         sem_stats = self.semantic.stats()
@@ -1777,7 +1917,7 @@ class NexusBrain:
             'total_parameters':self.total_parameters,
             'cache_hits':      self._cache_hits,
             'networks_active': 7,
-            'version':         'v8.0_X2',
+            'version':         'v9.0_APEX',
         }
     
     def save_all(self):
@@ -1910,46 +2050,43 @@ class NexusBrain:
         self.save_all()
     
     def learn(self, message: str, response: str, was_helpful: bool = True, search_results: list = []):
-        """Aprendizaje con entrenamiento multi-red ×2 — v8.0"""
+        """Aprendizaje con 3 pasadas + LR scheduler + vocabulario infinito — v9.0 APEX"""
         try:
             msg_emb  = self.emb.embed(message)
             resp_emb = self.emb.embed(response)
-            quality  = 0.92 if was_helpful else 0.2  # target más exigente
+            quality  = 0.92 if was_helpful else 0.2
 
-            # 1. Quality net — doble paso
-            self.conv_learner.train_quality_net(msg_emb, resp_emb, quality)
-            self.conv_learner.train_quality_net(msg_emb, resp_emb, quality)  # segundo paso
+            rel_inp    = np.concatenate([msg_emb, resp_emb]).reshape(1, -1)
+            rel_target = np.array([[quality]], dtype=np.float32)
 
-            # 2. Relevance net — doble paso
-            try:
-                rel_inp    = np.concatenate([msg_emb, resp_emb]).reshape(1, -1)
-                rel_target = np.array([[quality]], dtype=np.float32)
-                self.relevance_net.train_step(rel_inp, rel_target)
-                self.relevance_net.train_step(rel_inp, rel_target)  # segundo paso
-            except:
-                pass
+            for _pass in range(3):  # 3 pasadas de feedback
+                q_loss = self.conv_learner.train_quality_net(msg_emb, resp_emb, quality)
+                self._lr_step('quality', self.conv_learner.response_quality_net, q_loss)
+                r_loss = self.relevance_net.train_step(rel_inp, rel_target)
+                self._lr_step('relevance', self.relevance_net, r_loss)
 
-            # 3. Si hay resultados de búsqueda, entrenar rank_net con más muestras
+            # Rank net con resultados de búsqueda
             if search_results:
-                for result in search_results[:8]:  # era 5 → 8
+                for result in search_results[:8]:
                     self.train_from_feedback(message, result, was_helpful)
 
-            # 4. Patrón conversacional con score más alto
             feedback_score = 0.92 if was_helpful else 0.15
             self.conv_learner.learn_from_interaction(message, response, feedback_score)
 
-            # 5. Actualizar embeddings — doble fit
+            # Embeddings dual
             self.emb.fit_text(message)
             self.emb.fit_text(response)
-            self.emb.fit_text(message)   # segunda pasada
-            self.emb.fit_text(response)  # segunda pasada
+            self._fit_inf_emb(message)
+            self._fit_inf_emb(response)
             if was_helpful and len(response) > 20:
-                self.emb.update_pair(message, response, label=1.0, lr=0.006)  # lr doble
+                self.emb.update_pair(message, response, label=1.0, lr=0.006)
 
-            self.total_trainings += 2  # cuenta doble
+            # Actualizar parámetros (pueden haber crecido)
+            self.total_parameters = self._count_parameters()
+            self.total_trainings += 3
             self.save_all()
 
-            print(f"[Brain] Aprendizaje v8.0 X2: {self.total_trainings} entrenamientos totales", file=sys.stderr, flush=True)
+            print(f"[Brain] Aprendizaje v9.0 APEX: {self.total_trainings} entrenamientos | {self.total_parameters:,} params", file=sys.stderr, flush=True)
 
         except Exception as e:
             print(f"[Brain] Error en learn: {e}", file=sys.stderr, flush=True)
