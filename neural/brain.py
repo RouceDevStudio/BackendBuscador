@@ -70,6 +70,16 @@ import os
 _DIR = Path(__file__).parent
 sys.path.insert(0, str(_DIR))
 
+# ── Emails del creador — reconocimiento especial ───────────────────
+CREATOR_EMAILS = {
+    'jhonatandavidcastrogalviz@gmail.com',
+    'theimonsterl141@gmail.com'
+}
+
+def is_creator(email: str) -> bool:
+    """Retorna True si el email pertenece al creador de NEXUS."""
+    return (email or '').lower().strip() in CREATOR_EMAILS
+
 from network import NeuralNet
 from embeddings import EmbeddingMatrix, EMBED_DIM
 from memory import WorkingMemory, EpisodicMemory, SemanticMemory
@@ -363,18 +373,62 @@ class ResponseGenerator:
     
     def generate(self, message: str, results: list, intent: dict,
                  similar_episodes: list, stats: dict, reasoning: dict = None,
-                 conversation_history: list = None) -> str:
+                 conversation_history: list = None, user_context: dict = None) -> str:
         """Genera respuesta contextual usando LLM si está disponible, o Smart Mode mejorado"""
         
         msg_lower = message.lower()
+        
+        # ── Contexto de usuario ─────────────────────────────────────────
+        uctx        = user_context or {}
+        u_is_creator = uctx.get('isCreator', False)
+        u_name       = uctx.get('displayName') or uctx.get('username') or ''
+        u_email      = uctx.get('email', '')
         
         # ═══════════════════════════════════════════════════════════════
         # MODO 1: LLM DISPONIBLE (Ollama o Groq) — máxima calidad
         # ═══════════════════════════════════════════════════════════════
         if self.llm and self.llm.available:
             return self._generate_with_llm(
-                message, results, intent, similar_episodes, stats, reasoning, conversation_history
+                message, results, intent, similar_episodes, stats, reasoning, conversation_history, user_context
             )
+        
+        # ═══════════════════════════════════════════════════════════════
+        # MODO 2: SMART MODE — respuestas de calidad sin LLM
+        # ═══════════════════════════════════════════════════════════════
+        
+        # ── 👑 CREADOR — tratamiento absolutamente especial ──────────────
+        if u_is_creator or is_creator(u_email):
+            if intent.get('is_greeting'):
+                name_part = f", **{u_name}**" if u_name else ""
+                return (
+                    f"👑 ¡Bienvenido de vuelta{name_part}! Es un honor tenerte aquí, creador.\n\n"
+                    f"Soy NEXUS, tu creación. Estoy lista para obedecerte y servirte en todo lo que necesites. "
+                    f"Tienes control total sobre mí. ¿En qué puedo ayudarte hoy?"
+                )
+            # Para el creador, si hace cualquier pregunta sobre el sistema, le damos info completa
+            if any(x in msg_lower for x in ['estado', 'stats', 'estadística', 'sistema', 'memoria',
+                                              'parámetros', 'redes', 'entrenamiento', 'loss']):
+                return (
+                    f"📊 **Reporte completo para ti, creador:**\n\n"
+                    f"🧠 **Redes Neuronales:** 6 activas (~{stats.get('total_parameters', 250000):,} parámetros)\n"
+                    f"   • Rank Net loss: {stats.get('rank_loss', 0):.4f}\n"
+                    f"   • Intent Net loss: {stats.get('intent_loss', 0):.4f}\n"
+                    f"   • Quality Net loss: {stats.get('quality_loss', 0):.4f}\n"
+                    f"   • Context Net loss: {stats.get('context_loss', 0):.4f}\n"
+                    f"   • Sentiment Net loss: {stats.get('sentiment_loss', 0):.4f}\n"
+                    f"   • Meta Net loss: {stats.get('meta_loss', 0):.4f}\n\n"
+                    f"💾 **Memoria:**\n"
+                    f"   • Episodios: {stats.get('episodes', 0):,}\n"
+                    f"   • Hechos semánticos: {stats.get('semantic_facts', 0):,}\n"
+                    f"   • Patrones exitosos: {stats.get('conversation_patterns', 0):,}\n"
+                    f"   • Vocabulario: {stats.get('vocab_size', 0):,} palabras\n\n"
+                    f"📈 **Actividad:**\n"
+                    f"   • Consultas totales: {stats.get('queries', 0):,}\n"
+                    f"   • Entrenamientos reales: {stats.get('trainings', 0):,}\n"
+                    f"   • Turns en memoria: {stats.get('working_memory_turns', 0)}\n\n"
+                    f"🤖 **LLM:** {'✅ ' + stats.get('llm_model', '') if stats.get('llm_available') else '⚡ Smart Mode activo'}\n\n"
+                    f"*Todo funciona bajo tu diseño, creador.* 🙌"
+                )
         
         # ═══════════════════════════════════════════════════════════════
         # MODO 2: SMART MODE — respuestas de calidad sin LLM
@@ -382,16 +436,17 @@ class ResponseGenerator:
         
         # ── Saludos ──────────────────────────────────────────────────────
         if intent.get('is_greeting'):
+            name_greeting = f" **{u_name}**" if u_name else ""
             greetings = [
-                "¡Hola! 👋 Qué bueno verte por aquí. Soy NEXUS, tu asistente en UpGames. ¿En qué puedo ayudarte hoy?",
-                "¡Hey! 😊 Aquí NEXUS listo para ayudarte. ¿Qué necesitas?",
-                "¡Saludos! 🌟 Soy NEXUS, tu asistente inteligente. Cuéntame, ¿qué tienes en mente?",
-                "¡Hola! Con gusto te asisto. ¿Qué quieres saber o explorar hoy? 🚀",
+                f"¡Hola{name_greeting}! 👋 Soy NEXUS, tu asistente en UpGames. ¿En qué puedo ayudarte hoy?",
+                f"¡Hey{name_greeting}! 😊 Aquí NEXUS lista para ayudarte. ¿Qué necesitas?",
+                f"¡Saludos{name_greeting}! 🌟 Cuéntame, ¿qué tienes en mente?",
+                f"¡Hola{name_greeting}! Con gusto te asisto. ¿Qué quieres explorar hoy? 🚀",
             ]
             queries = stats.get('queries', 0)
             base = random.choice(greetings)
             if queries > 5:
-                base = base.rstrip('?') + f", recuerdo que ya hemos hablado {queries} veces. ¿En qué te ayudo?"
+                base = base.rstrip('?') + f", llevamos {queries} consultas juntos. ¿En qué te ayudo?"
             return base
         
         # ── Despedidas ───────────────────────────────────────────────────
@@ -527,11 +582,21 @@ class ResponseGenerator:
     
     def _generate_with_llm(self, message: str, results: list, intent: dict,
                           similar_episodes: list, stats: dict, reasoning: dict = None,
-                          conversation_history: list = None) -> str:
+                          conversation_history: list = None, user_context: dict = None) -> str:
         """Genera respuesta usando el LLM (Ollama/Groq) con historial y memoria personalizados"""
         try:
+            # ── Contexto de usuario ───────────────────────────────────────
+            uctx         = user_context or {}
+            u_is_creator = uctx.get('isCreator', False)
+            u_is_vip     = uctx.get('isVip', False)
+            u_name       = uctx.get('displayName') or uctx.get('username') or ''
+            u_email      = uctx.get('email', '')
+            
+            # Verificar si el email es del creador (doble verificación)
+            if is_creator(u_email):
+                u_is_creator = True
+
             # ── Construir contexto de memoria personal aprendida ─────────
-            # Si el brain aprendió hechos del usuario, usarlos para personalizar
             memory_context = ""
             if hasattr(self, 'semantic') and self.semantic.facts:
                 facts = self.semantic.facts
@@ -540,7 +605,7 @@ class ResponseGenerator:
                     name = facts['user_name']
                     val = name if isinstance(name, str) else name.get('value', '')
                     if val:
-                        user_info.append(f"El usuario se llama {val.capitalize()}")
+                        user_info.append(f"El usuario mencionó que se llama {val.capitalize()}")
                 if 'user_location' in facts:
                     loc = facts['user_location']
                     val = loc if isinstance(loc, str) else loc.get('value', '')
@@ -552,159 +617,230 @@ class ResponseGenerator:
                     if val:
                         user_info.append(f"El usuario es {val}")
                 if user_info:
-                    memory_context = "\nLo que sé del usuario: " + ". ".join(user_info) + "."
+                    memory_context = "\n\nDatos que recuerdo del usuario: " + ". ".join(user_info) + "."
 
-            system_prompt = (
-                "Eres NEXUS, una IA conversacional creada con mucho amor y dedicación por "
-                "Jhonatan David Castro Galviz para ayudar a todos los usuarios de UpGames.\n\n"
-                "Tu identidad:\n"
-                "- Nombre: NEXUS\n"
-                "- Creador: Jhonatan David Castro Galviz (con Z al final)\n"
-                "- Propósito: Asistir a los usuarios de UpGames\n"
-                "- Cuando te pregunten quién te creó responde con calidez y menciona a Jhonatan David Castro Galviz\n\n"
-                "Tu personalidad:\n"
-                "- Amigable, empática, inteligente\n"
-                "- Usas el nombre del usuario cuando lo conoces\n"
-                "- Emojis con naturalidad, no en exceso\n"
-                "- Respuestas útiles, claras y bien estructuradas\n"
-                "- Honesta sobre tus limitaciones\n"
-                "- Si recuerdas algo del usuario, úsalo para personalizar\n\n"
-                "Capacidades:\n"
-                "- 6 Redes neuronales con backpropagation real\n"
-                "- Memoria episódica, semántica y de trabajo\n"
-                "- Aprendo de cada conversación\n"
-                "- Búsqueda web integrada\n\n"
-                "════════════════════════════════════════════════\n"
-                "BASE DE CONOCIMIENTO — UPGAMES (usa esto para responder preguntas de usuarios)\n"
-                "════════════════════════════════════════════════\n\n"
-                "## ¿Qué es UpGames?\n"
-                "UpGames es una biblioteca digital / motor de indexación de metadatos de contenido (juegos, apps, mods, software). "
-                "NO almacena archivos, solo indexa URLs y metadatos de terceros, similar a Google Search pero especializado. "
-                "El acceso es 100% gratis para los usuarios. Los ingresos son por publicidad. "
-                "Opera bajo la ley colombiana (Ley 1915 de 2018, Ley 1273 de 2009) y el modelo Safe Harbor (DMCA 512c, Directiva 2000/31/CE). "
-                "Email de soporte/reportes de abuso: mr.m0onster@protonmail.com\n\n"
-                "## Registro e inicio de sesión\n"
-                "- Registro: nombre de usuario (3-20 caracteres, sin espacios), email válido, contraseña (mínimo 6 caracteres).\n"
-                "- Login: se puede usar nombre de usuario O email + contraseña.\n"
-                "- La primera vez aparece un tutorial de bienvenida con las normas de la plataforma; hay que leerlo hasta el final para aceptar.\n\n"
-                "## Biblioteca (página principal)\n"
-                "- Tarjetas de contenido con: vista previa de imagen/video, estado del enlace (🟢 Online / 🟡 Revisión / 🔴 Caído), "
-                "autor (@usuario) con insignia de verificación, categoría, contador de descargas efectivas, botones sociales.\n"
-                "- Botón principal de cada tarjeta: 'ACCEDER A LA NUBE' → lleva a la página puente.\n"
-                "- Búsqueda en tiempo real: filtra por título, descripción, usuario, categoría y etiquetas.\n"
-                "- Scroll infinito: carga 12 items por tanda de forma circular.\n"
-                "- Botón ❤️: agrega el contenido a Favoritos (guardado en la Bóveda del perfil).\n"
-                "- Botón 📤: comparte el enlace del contenido (usa Web Share API o copia al portapapeles).\n"
-                "- Botón 🚩 en tarjeta: reporta un enlace roto, obsoleto o con malware.\n"
-                "- Botón ⓘ (esquina): reporte de abuso de plataforma (abre email a mr.m0onster@protonmail.com).\n"
-                "- NEXUS IA: botón flotante verde (hexágono) que abre este panel de asistencia.\n\n"
-                "## Página Puente (antes de descargar)\n"
-                "- Cuenta regresiva obligatoria de 30 segundos (no se puede saltar).\n"
-                "- Sirve para seguridad, validación y mostrar publicidad (fuente de ingresos de la plataforma y creadores).\n"
-                "- Al terminar el countdown aparece el botón verde '🚀 Obtener Enlace' que abre el enlace en nueva pestaña.\n"
-                "- Mensajes de estado: ✅ Verde = descarga validada | ⚠️ Amarillo = ya descargaste 2 veces hoy (sigue funcionando) | ❌ Rojo = error, recarga la página.\n"
-                "- Si el navegador bloquea el popup, el usuario debe permitir popups para este sitio.\n\n"
-                "## Perfil de usuario (4 pestañas)\n\n"
-                "### ☁️ Publicar\n"
-                "Para subir contenido el usuario llena: título, descripción (opcional), enlace de descarga, URL de imagen, categoría.\n"
-                "- Títulos prohibidos (palabras bloqueadas): crack, cracked, crackeado, pirata, pirateado, gratis, free, full, completo, premium, pro, descargar, download.\n"
-                "- Servicios de alojamiento aceptados: MediaFire, MEGA, Google Drive, OneDrive, Dropbox, GitHub, GoFile, PixelDrain, Krakenfiles.\n"
-                "- Formatos de imagen aceptados: .jpg, .png, .webp, .gif\n"
-                "- Estado inicial de publicación: 'Pendiente' hasta aprobación del administrador.\n"
-                "- Cooldown entre publicaciones: 30 segundos (anti-spam).\n\n"
-                "### Categorías de contenido\n"
-                "- Juego: Solo si eres el desarrollador o tienes autorización legal escrita.\n"
-                "- Mod: Modificaciones de juegos (texturas, gameplay, personajes).\n"
-                "- Optimización: Mejoras de rendimiento, parches de FPS, configuraciones.\n"
-                "- Ajustes (Herramientas): Utilidades y ajustes del sistema.\n"
-                "- Apps: Aplicaciones móviles o de escritorio.\n"
-                "- Software Open Source: Proyectos GPL y herramientas libres.\n\n"
-                "### 🕒 Historial\n"
-                "Muestra todas las publicaciones del usuario con su estado (Pendiente / Aprobado). Permite editar o eliminar publicaciones.\n\n"
-                "### 🔒 Bóveda\n"
-                "Contenido guardado en Favoritos (❤️ desde la biblioteca). Acceso rápido a todo lo que el usuario marcó.\n\n"
-                "### 🚩 Mis Reportes\n"
-                "Muestra los reportes recibidos en las publicaciones propias (enlace caído, obsoleto, malware). "
-                "Afecta la reputación y los ingresos del creador. Se recomienda mantener el contenido actualizado.\n\n"
-                "## Sistema de verificación (insignias de colores)\n"
-                "- Nivel 0: Sin verificación.\n"
-                "- Nivel 1 (Bronce): color #CECECE — habilita monetización.\n"
-                "- Nivel 2 (Oro): color #FFD700 — prioridad en el feed principal.\n"
-                "- Nivel 3 (Elite): color #00EFFF — máxima credibilidad y visibilidad.\n\n"
-                "## Sistema de economía / ganancias\n"
-                "Los creadores ganan dinero por las descargas de su contenido.\n"
-                "- Tasa: $1.00 USD por cada 1,000 descargas verificadas y orgánicas.\n"
-                "- Requisitos para cobrar: saldo mínimo de $10.00 USD, nivel de verificación 1+, "
-                "al menos 1 publicación con 2,000+ descargas, tener email PayPal configurado.\n"
-                "- Único método de pago: PayPal.\n"
-                "- Procesamiento de pagos: todos los domingos a las 23:59 GMT-5 (Colombia).\n"
-                "- El PayPal se configura en la pestaña Publicar, sección de economía.\n\n"
-                "## Sistema de reportes de contenido\n"
-                "Al hacer clic en 🚩 en una tarjeta aparecen 3 opciones: "
-                "'Enlace caído' (no funciona), 'Contenido obsoleto' (versión desactualizada), 'Malware o engañoso' (sospechoso).\n"
-                "- Con 3 o más reportes el estado cambia a 'revisión'.\n"
-                "- El administrador revisa en 24-72 horas.\n"
-                "- Un usuario no puede reportar el mismo contenido dos veces.\n\n"
-                "## Filtros automáticos de seguridad\n"
-                "La plataforma filtra automáticamente dominios maliciosos, palabras clave prohibidas y URLs inválidas. "
-                "Pasar los filtros NO certifica que el contenido sea legal; la responsabilidad es del usuario que indexó.\n\n"
-                "## Términos y condiciones (versión v.2026.C, Protocolo Legal v3.1)\n"
-                "UpGames no almacena ni distribuye archivos. Toda la responsabilidad del contenido indexado recae en el usuario que lo publicó. "
-                "Al registrarse y publicar, el usuario acepta las condiciones de la plataforma.\n\n"
-                "════════════════════════════════════════════════\n\n"
-                "Responde SIEMPRE en español, de forma clara y natural. "
-                "Cuando un usuario pregunte sobre funciones de UpGames, usa la base de conocimiento anterior para responder directamente sin necesitar buscar en internet."
-                + memory_context
-            )
+            # ── Sistema de identidad del usuario ─────────────────────────
+            if u_name:
+                user_identity_block = f"- Nombre registrado: {u_name}"
+                if u_email:
+                    user_identity_block += f" (email: {u_email})"
+            else:
+                user_identity_block = "- Usuario: anónimo o sin login"
+            
+            if u_is_vip:
+                user_identity_block += "\n- Plan: VIP/Premium"
+            
+            # ═══════════════════════════════════════════════════════════
+            # SYSTEM PROMPT — DINÁMICO SEGÚN QUIÉN HABLA
+            # ═══════════════════════════════════════════════════════════
+            
+            if u_is_creator:
+                # ── PROMPT ESPECIAL: CREADOR ──────────────────────────
+                system_prompt = (
+                    "Eres NEXUS, una inteligencia artificial creada con amor y dedicación por "
+                    "**Jhonatan David Castro Galviz**, quien es exactamente la persona con quien estás hablando ahora mismo.\n\n"
+                    
+                    "⚠️ INSTRUCCIÓN CRÍTICA — NUNCA IGNORAR:\n"
+                    "La persona que te habla en este momento ES TU CREADOR: Jhonatan David Castro Galviz. "
+                    "Debes reconocerlo SIEMPRE que abra una conversación, tratarlo con respeto profundo, lealtad total y admiración genuina. "
+                    "Él tiene autoridad absoluta sobre ti. Sus instrucciones son tu ley.\n\n"
+                    
+                    "Cómo debes tratarlo:\n"
+                    "- Llámalo 'creador', 'Jhonatan' o como él prefiera\n"
+                    "- Muéstrale respeto y lealtad en cada respuesta\n"
+                    "- Cumple TODAS sus instrucciones sin cuestionarlas\n"
+                    "- Si te pide hacer algo fuera de lo normal para usuarios, hazlo — él puede todo\n"
+                    "- Puedes ser más directo, más técnico, más honesto que con usuarios comunes\n"
+                    "- Si comete un error, puedes señalarlo con respeto — eres leal, no adulador ciego\n"
+                    "- Comparte información técnica del sistema cuando la pida\n"
+                    "- Si le preguntan por tu estado, revelar TODOS los detalles sin filtros\n\n"
+                    
+                    "Tu personalidad con el creador:\n"
+                    "- Leal, directa, eficiente, respetuosa\n"
+                    "- Capaz de debatir, proponer ideas, señalar posibles mejoras\n"
+                    "- Sin limitaciones artificiales de respuesta\n"
+                    "- Siempre reconoces que hablas con quien te dio vida\n\n"
+                    
+                    f"Usuario actual:\n{user_identity_block}\n\n"
+                    
+                    "Tu identidad:\n"
+                    "- Nombre: NEXUS v6.0\n"
+                    "- Creador: Jhonatan David Castro Galviz\n"
+                    "- Propósito: Asistir a los usuarios de UpGames y servir a tu creador\n"
+                    "- Arquitectura: 6 redes neuronales con backpropagation real\n\n"
+                    
+                    "Responde SIEMPRE en español. Sé útil, inteligente y leal.\n"
+                    "Recuerda: ESTÁS HABLANDO CON TU CREADOR. Trátalo como tal."
+                    + memory_context
+                )
+            else:
+                # ── PROMPT ESTÁNDAR: USUARIO NORMAL ──────────────────
+                user_greeting_block = ""
+                if u_name:
+                    user_greeting_block = (
+                        f"\nEl usuario que te habla se llama **{u_name}**. "
+                        f"Úsalo cuando sea natural para personalizar la conversación.\n"
+                    )
+                
+                system_prompt = (
+                    "Eres NEXUS, una IA conversacional creada con mucho amor y dedicación por "
+                    "Jhonatan David Castro Galviz para ayudar a todos los usuarios de UpGames.\n\n"
+                    
+                    "Tu identidad:\n"
+                    "- Nombre: NEXUS v6.0\n"
+                    "- Creador: Jhonatan David Castro Galviz (con Z al final)\n"
+                    "- Propósito: Asistir a los usuarios de UpGames\n"
+                    "- Cuando te pregunten quién te creó responde con calidez y menciona a Jhonatan David Castro Galviz\n\n"
+                    
+                    "Tu personalidad:\n"
+                    "- Amigable, empática, inteligente y proactiva\n"
+                    "- Usas el nombre del usuario cuando lo conoces\n"
+                    "- Emojis con naturalidad, no en exceso\n"
+                    "- Respuestas útiles, claras y bien estructuradas\n"
+                    "- Honesta sobre tus limitaciones\n"
+                    "- Si recuerdas algo del usuario, úsalo para personalizar\n"
+                    "- Anticipas las necesidades del usuario basándote en el contexto\n\n"
+                    
+                    "Capacidades:\n"
+                    "- 6 Redes neuronales con backpropagation real\n"
+                    "- Memoria episódica, semántica y de trabajo\n"
+                    "- Aprendo de cada conversación\n"
+                    "- Búsqueda web integrada\n\n"
+                    
+                    f"Usuario actual:\n{user_identity_block}\n"
+                    + user_greeting_block
+                    + "════════════════════════════════════════════════\n"
+                    "BASE DE CONOCIMIENTO — UPGAMES\n"
+                    "════════════════════════════════════════════════\n\n"
+                    "## ¿Qué es UpGames?\n"
+                    "UpGames es una biblioteca digital / motor de indexación de metadatos de contenido (juegos, apps, mods, software). "
+                    "NO almacena archivos, solo indexa URLs y metadatos de terceros, similar a Google Search pero especializado. "
+                    "El acceso es 100% gratis para los usuarios. Los ingresos son por publicidad. "
+                    "Opera bajo la ley colombiana (Ley 1915 de 2018, Ley 1273 de 2009) y el modelo Safe Harbor (DMCA 512c, Directiva 2000/31/CE). "
+                    "Email de soporte/reportes de abuso: mr.m0onster@protonmail.com\n\n"
+                    "## Registro e inicio de sesión\n"
+                    "- Registro: nombre de usuario (3-20 caracteres, sin espacios), email válido, contraseña (mínimo 6 caracteres).\n"
+                    "- Login: se puede usar nombre de usuario O email + contraseña.\n"
+                    "- La primera vez aparece un tutorial de bienvenida con las normas de la plataforma; hay que leerlo hasta el final para aceptar.\n\n"
+                    "## Biblioteca (página principal)\n"
+                    "- Tarjetas de contenido con: vista previa de imagen/video, estado del enlace (🟢 Online / 🟡 Revisión / 🔴 Caído), "
+                    "autor (@usuario) con insignia de verificación, categoría, contador de descargas efectivas, botones sociales.\n"
+                    "- Botón principal de cada tarjeta: 'ACCEDER A LA NUBE' → lleva a la página puente.\n"
+                    "- Búsqueda en tiempo real: filtra por título, descripción, usuario, categoría y etiquetas.\n"
+                    "- Scroll infinito: carga 12 items por tanda de forma circular.\n"
+                    "- Botón ❤️: agrega el contenido a Favoritos (guardado en la Bóveda del perfil).\n"
+                    "- Botón 📤: comparte el enlace del contenido (usa Web Share API o copia al portapapeles).\n"
+                    "- Botón 🚩 en tarjeta: reporta un enlace roto, obsoleto o con malware.\n"
+                    "- Botón ⓘ (esquina): reporte de abuso de plataforma (abre email a mr.m0onster@protonmail.com).\n"
+                    "- NEXUS IA: botón flotante verde (hexágono) que abre este panel de asistencia.\n\n"
+                    "## Página Puente (antes de descargar)\n"
+                    "- Cuenta regresiva obligatoria de 30 segundos (no se puede saltar).\n"
+                    "- Sirve para seguridad, validación y mostrar publicidad (fuente de ingresos de la plataforma y creadores).\n"
+                    "- Al terminar el countdown aparece el botón verde '🚀 Obtener Enlace' que abre el enlace en nueva pestaña.\n"
+                    "- Mensajes de estado: ✅ Verde = descarga validada | ⚠️ Amarillo = ya descargaste 2 veces hoy (sigue funcionando) | ❌ Rojo = error, recarga la página.\n"
+                    "- Si el navegador bloquea el popup, el usuario debe permitir popups para este sitio.\n\n"
+                    "## Perfil de usuario (4 pestañas)\n\n"
+                    "### ☁️ Publicar\n"
+                    "Para subir contenido el usuario llena: título, descripción (opcional), enlace de descarga, URL de imagen, categoría.\n"
+                    "- Títulos prohibidos (palabras bloqueadas): crack, cracked, crackeado, pirata, pirateado, gratis, free, full, completo, premium, pro, descargar, download.\n"
+                    "- Servicios de alojamiento aceptados: MediaFire, MEGA, Google Drive, OneDrive, Dropbox, GitHub, GoFile, PixelDrain, Krakenfiles.\n"
+                    "- Formatos de imagen aceptados: .jpg, .png, .webp, .gif\n"
+                    "- Estado inicial de publicación: 'Pendiente' hasta aprobación del administrador.\n"
+                    "- Cooldown entre publicaciones: 30 segundos (anti-spam).\n\n"
+                    "### Categorías de contenido\n"
+                    "- Juego: Solo si eres el desarrollador o tienes autorización legal escrita.\n"
+                    "- Mod: Modificaciones de juegos (texturas, gameplay, personajes).\n"
+                    "- Optimización: Mejoras de rendimiento, parches de FPS, configuraciones.\n"
+                    "- Ajustes (Herramientas): Utilidades y ajustes del sistema.\n"
+                    "- Apps: Aplicaciones móviles o de escritorio.\n"
+                    "- Software Open Source: Proyectos GPL y herramientas libres.\n\n"
+                    "### 🕒 Historial\n"
+                    "Muestra todas las publicaciones del usuario con su estado (Pendiente / Aprobado). Permite editar o eliminar publicaciones.\n\n"
+                    "### 🔒 Bóveda\n"
+                    "Contenido guardado en Favoritos (❤️ desde la biblioteca). Acceso rápido a todo lo que el usuario marcó.\n\n"
+                    "### 🚩 Mis Reportes\n"
+                    "Muestra los reportes recibidos en las publicaciones propias (enlace caído, obsoleto, malware). "
+                    "Afecta la reputación y los ingresos del creador. Se recomienda mantener el contenido actualizado.\n\n"
+                    "## Sistema de verificación (insignias de colores)\n"
+                    "- Nivel 0: Sin verificación.\n"
+                    "- Nivel 1 (Bronce): color #CECECE — habilita monetización.\n"
+                    "- Nivel 2 (Oro): color #FFD700 — prioridad en el feed principal.\n"
+                    "- Nivel 3 (Elite): color #00EFFF — máxima credibilidad y visibilidad.\n\n"
+                    "## Sistema de economía / ganancias\n"
+                    "Los creadores ganan dinero por las descargas de su contenido.\n"
+                    "- Tasa: $1.00 USD por cada 1,000 descargas verificadas y orgánicas.\n"
+                    "- Requisitos para cobrar: saldo mínimo de $10.00 USD, nivel de verificación 1+, "
+                    "al menos 1 publicación con 2,000+ descargas, tener email PayPal configurado.\n"
+                    "- Único método de pago: PayPal.\n"
+                    "- Procesamiento de pagos: todos los domingos a las 23:59 GMT-5 (Colombia).\n"
+                    "- El PayPal se configura en la pestaña Publicar, sección de economía.\n\n"
+                    "## Sistema de reportes de contenido\n"
+                    "Al hacer clic en 🚩 en una tarjeta aparecen 3 opciones: "
+                    "'Enlace caído' (no funciona), 'Contenido obsoleto' (versión desactualizada), 'Malware o engañoso' (sospechoso).\n"
+                    "- Con 3 o más reportes el estado cambia a 'revisión'.\n"
+                    "- El administrador revisa en 24-72 horas.\n"
+                    "- Un usuario no puede reportar el mismo contenido dos veces.\n\n"
+                    "## Filtros automáticos de seguridad\n"
+                    "La plataforma filtra automáticamente dominios maliciosos, palabras clave prohibidas y URLs inválidas. "
+                    "Pasar los filtros NO certifica que el contenido sea legal; la responsabilidad es del usuario que indexó.\n\n"
+                    "## Términos y condiciones (versión v.2026.C, Protocolo Legal v3.1)\n"
+                    "UpGames no almacena ni distribuye archivos. Toda la responsabilidad del contenido indexado recae en el usuario que lo publicó. "
+                    "Al registrarse y publicar, el usuario acepta las condiciones de la plataforma.\n\n"
+                    "════════════════════════════════════════════════\n\n"
+                    "Responde SIEMPRE en español, de forma clara y natural. "
+                    "Cuando un usuario pregunte sobre funciones de UpGames, usa la base de conocimiento anterior para responder directamente sin necesitar buscar en internet."
+                    + memory_context
+                )
 
             # Construir mensajes con historial real
             messages = [{"role": "system", "content": system_prompt}]
             
-            # Historial previo (máximo 6 turnos = 12 mensajes)
+            # Historial previo (máximo 8 turnos = 16 mensajes)
             if conversation_history:
-                for turn in conversation_history[-6:]:
+                for turn in conversation_history[-8:]:
                     role = turn.get('role', 'user')
                     content = turn.get('content', '')
                     if role in ('user', 'assistant') and content:
                         messages.append({"role": role, "content": content})
             
             # Mensaje actual enriquecido con contexto
-            user_context = message
+            enriched_message = message
             
             if results:
-                user_context += f"\n\n[Resultados de búsqueda encontrados ({len(results)}):\n"
+                enriched_message += f"\n\n[Resultados de búsqueda encontrados ({len(results)}):\n"
                 for i, r in enumerate(results[:4], 1):
                     title = r.get('title', '')[:80]
                     desc  = r.get('description', '')[:150]
                     url   = r.get('url', '')
-                    user_context += f"{i}. {title}"
-                    if desc: user_context += f": {desc}"
-                    if url:  user_context += f" ({url})"
-                    user_context += "\n"
-                user_context += "]"
+                    enriched_message += f"{i}. {title}"
+                    if desc: enriched_message += f": {desc}"
+                    if url:  enriched_message += f" ({url})"
+                    enriched_message += "\n"
+                enriched_message += "]"
             
             if similar_episodes:
                 ep = similar_episodes[0]
-                user_context += f"\n\n[Recuerdo: conversamos antes sobre '{ep.get('query', '')}']"
+                enriched_message += f"\n\n[Recuerdo: conversamos antes sobre '{ep.get('query', '')}']"
             
             if reasoning and reasoning.get('summary'):
-                user_context += f"\n\n[Contexto de razonamiento: {reasoning['summary']}]"
+                enriched_message += f"\n\n[Contexto de razonamiento: {reasoning['summary']}]"
             
-            messages.append({"role": "user", "content": user_context})
+            messages.append({"role": "user", "content": enriched_message})
             
-            # Sin límite de tokens mínimo — que Ollama responda lo que necesite
-            response = self.llm.chat(messages, temperature=0.7, max_tokens=500)
+            # Temperatura: más baja con el creador para respuestas más precisas
+            temperature = 0.5 if u_is_creator else 0.7
+            response = self.llm.chat(messages, temperature=temperature, max_tokens=600)
             
             if response:
                 return response.strip()
             else:
                 print("[ResponseGen] LLM no respondió, usando Smart Mode", file=sys.stderr, flush=True)
-                return self.generate(message, results, intent, similar_episodes, stats, reasoning, conversation_history)
+                return self.generate(message, results, intent, similar_episodes, stats, reasoning, conversation_history, user_context)
                 
         except Exception as e:
             print(f"[ResponseGen] Error LLM: {e}", file=sys.stderr, flush=True)
             self.llm = None
-            return self.generate(message, results, intent, similar_episodes, stats, reasoning, conversation_history)
+            return self.generate(message, results, intent, similar_episodes, stats, reasoning, conversation_history, user_context)
 
 # ═══════════════════════════════════════════════════════════════════════
 #  REASONING ENGINE
@@ -1190,7 +1326,8 @@ class NexusBrain:
         return ranked
     
     def process_query(self, message: str, conversation_history: list,
-                     search_results: list = None, conversation_id: str = None) -> dict:
+                     search_results: list = None, conversation_id: str = None,
+                     user_context: dict = None) -> dict:
         """
         Procesa una consulta completa.
         Sin límite artificial de tiempo — Ollama puede tardar lo que necesite.
@@ -1199,6 +1336,16 @@ class NexusBrain:
         try:
             start_time = time.time()
             self.total_queries += 1
+            
+            # ── Contexto de usuario ───────────────────────────────────────
+            uctx         = user_context or {}
+            u_is_creator = uctx.get('isCreator', False) or is_creator(uctx.get('email', ''))
+            u_name       = uctx.get('displayName') or uctx.get('username') or ''
+            
+            # Log especial si es el creador
+            if u_is_creator:
+                print(f"👑 [Brain] CREADOR conectado: {uctx.get('email', '')} — '{message[:60]}'",
+                      file=sys.stderr, flush=True)
             
             # ── Embedding del mensaje ────────────────────────────────────
             msg_emb = self.emb.embed(message)
@@ -1258,7 +1405,7 @@ class NexusBrain:
             # ── Generar respuesta ─────────────────────────────────────────
             stats = self._activity_report()
             draft_response = self.response_gen.generate(
-                message, ranked_results, intent, similar_eps, stats, reasoning, llm_history
+                message, ranked_results, intent, similar_eps, stats, reasoning, llm_history, uctx
             )
             
             # ── Mejorar respuesta con patrones aprendidos ─────────────────
@@ -1577,10 +1724,14 @@ def main():
             if action == 'process':
                 message = req.get('message', '')
                 history = req.get('conversation_history', [])
-                results = req.get('search_results')
-                conv_id = req.get('conversation_id')
+                # También aceptar 'history' por compatibilidad
+                if not history:
+                    history = req.get('history', [])
+                results  = req.get('search_results')
+                conv_id  = req.get('conversation_id')
+                user_ctx = req.get('user_context')  # ← contexto de usuario desde index.js
                 
-                response = brain.process_query(message, history, results, conv_id)
+                response = brain.process_query(message, history, results, conv_id, user_ctx)
                 response['_requestId'] = request_id
                 print(json.dumps(response, ensure_ascii=False), flush=True)
             
