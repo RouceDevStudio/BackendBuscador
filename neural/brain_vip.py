@@ -279,11 +279,11 @@ class ConversationLearner:
         else:
             self.conversation_db['failed_patterns'].append(pattern)
         
-        # Limitar tamaño — capacidad ×10
-        if len(self.conversation_db['successful_patterns']) > 10000:
-            self.conversation_db['successful_patterns'] = self.conversation_db['successful_patterns'][-10000:]
-        if len(self.conversation_db['failed_patterns']) > 5000:
-            self.conversation_db['failed_patterns'] = self.conversation_db['failed_patterns'][-5000:]
+        # Limitar tamaño
+        if len(self.conversation_db['successful_patterns']) > 1000:
+            self.conversation_db['successful_patterns'] = self.conversation_db['successful_patterns'][-1000:]
+        if len(self.conversation_db['failed_patterns']) > 500:
+            self.conversation_db['failed_patterns'] = self.conversation_db['failed_patterns'][-500:]
     
     def improve_response(self, message: str, draft_response: str, reasoning: dict = None) -> str:
         """Mejora la respuesta basándose en patrones aprendidos"""
@@ -665,12 +665,27 @@ class ResponseGenerator:
                 u_is_creator = True
 
             # ── Construir contexto de memoria personal aprendida ─────────
-            # MEJORADO: Inyecta TODOS los hechos semánticos al LLM (no solo 3)
             memory_context = ""
-            if hasattr(self, 'semantic'):
-                full_semantic = self.semantic.get_all_facts_for_context(min_confidence=0.3)
-                if full_semantic:
-                    memory_context = f"\n\n{'═'*48}\n🧠 MEMORIA SEMÁNTICA — LO QUE SÉ DE ESTE USUARIO\n{'═'*48}\n{full_semantic}\n{'═'*48}"
+            if hasattr(self, 'semantic') and self.semantic.facts:
+                facts = self.semantic.facts
+                user_info = []
+                if 'user_name' in facts:
+                    name = facts['user_name']
+                    val = name if isinstance(name, str) else name.get('value', '')
+                    if val:
+                        user_info.append(f"El usuario mencionó que se llama {val.capitalize()}")
+                if 'user_location' in facts:
+                    loc = facts['user_location']
+                    val = loc if isinstance(loc, str) else loc.get('value', '')
+                    if val:
+                        user_info.append(f"El usuario vive en {val}")
+                if 'user_profession' in facts:
+                    prof = facts['user_profession']
+                    val = prof if isinstance(prof, str) else prof.get('value', '')
+                    if val:
+                        user_info.append(f"El usuario es {val}")
+                if user_info:
+                    memory_context = "\n\nDatos que recuerdo del usuario: " + ". ".join(user_info) + "."
 
             # ── Sistema de identidad del usuario ─────────────────────────
             if u_name:
@@ -733,13 +748,7 @@ class ResponseGenerator:
                     f"════════════════════════════════════════════════\n\n"
                     
                     "Responde SIEMPRE en español. Sé útil, inteligente y leal.\n"
-                    "Recuerda: ESTÁS HABLANDO CON TU CREADOR. Trátalo como tal.\n\n"
-                    "⚠️ INSTRUCCIONES DE MEMORIA Y LONGITUD:\n"
-                    "- Usa ACTIVAMENTE todo lo que está en la sección 'MEMORIA SEMÁNTICA' para personalizar CADA respuesta.\n"
-                    "- Si recuerdas el nombre, úsalo. Si recuerdas sus gustos, refléjalo. Si recuerdas su plataforma, úsala.\n"
-                    "- NUNCA te cortes artificialmente. Si la respuesta exige un texto largo y detallado, escríbelo completo.\n"
-                    "- No preguntes '¿quieres que continúe?'. Nunca fragmentes sin razón real.\n"
-                    "- Desarrolla cada punto con toda la profundidad que el tema exija."
+                    "Recuerda: ESTÁS HABLANDO CON TU CREADOR. Trátalo como tal."
                     + memory_context
                 )
             else:
@@ -866,22 +875,16 @@ class ResponseGenerator:
                     "Al registrarse y publicar, el usuario acepta las condiciones de la plataforma.\n\n"
                     "════════════════════════════════════════════════\n\n"
                     "Responde SIEMPRE en español, de forma clara y natural. "
-                    "Cuando un usuario pregunte sobre funciones de UpGames, usa la base de conocimiento anterior para responder directamente sin necesitar buscar en internet.\n\n"
-                    "⚠️ INSTRUCCIONES DE MEMORIA Y LONGITUD:\n"
-                    "- Usa ACTIVAMENTE todo lo que aparece en la sección 'MEMORIA SEMÁNTICA'. Si sabes el nombre del usuario, úsalo. "
-                    "Si recuerdas su juego favorito, su plataforma, sus gustos — aplícalos para personalizar cada respuesta.\n"
-                    "- NUNCA te cortes ni resumas artificialmente. Si el usuario necesita una explicación completa, dásela íntegra.\n"
-                    "- No uses '¿quieres que continúe?' ni fragmentes respuestas sin necesidad real.\n"
-                    "- Desarrolla cada punto con toda la profundidad que el tema requiera."
+                    "Cuando un usuario pregunte sobre funciones de UpGames, usa la base de conocimiento anterior para responder directamente sin necesitar buscar en internet."
                     + memory_context
                 )
 
             # Construir mensajes con historial real
             messages = [{"role": "system", "content": system_prompt}]
             
-            # Historial previo (máximo 20 turnos = 40 mensajes)
+            # Historial previo (máximo 8 turnos = 16 mensajes)
             if conversation_history:
-                for turn in conversation_history[-20:]:
+                for turn in conversation_history[-8:]:
                     role = turn.get('role', 'user')
                     content = turn.get('content', '')
                     if role in ('user', 'assistant') and content:
@@ -913,7 +916,7 @@ class ResponseGenerator:
             
             # Temperatura: más baja con el creador para respuestas más precisas
             temperature = 0.5 if u_is_creator else 0.7
-            response = self.llm.chat(messages, temperature=temperature, max_tokens=8192)
+            response = self.llm.chat(messages, temperature=temperature, max_tokens=600)
             
             if response:
                 return response.strip()
@@ -1014,8 +1017,8 @@ class NexusBrain:
                 print(f"⚠️  [Brain] Error inicializando LLM: {e}", file=sys.stderr, flush=True)
         
         # ── Memoria — capacidad ×2 ───────────────────────────────────
-        self.working  = WorkingMemory(max_turns=128)                              # 64 → 128
-        self.episodic = EpisodicMemory(f'{DATA_DIR}/episodic.pkl', max_episodes=500000)  # 200k → 500k
+        self.working  = WorkingMemory(max_turns=64)                              # 32 → 64
+        self.episodic = EpisodicMemory(f'{DATA_DIR}/episodic.pkl', max_episodes=200000)  # 100k → 200k
         self.semantic = SemanticMemory(f'{DATA_DIR}/semantic.json')
         
         # ── Componentes de aprendizaje ────────────────────────────────
@@ -1524,7 +1527,7 @@ class NexusBrain:
             # ── Buscar episodios similares en memoria ────────────────────
             similar_eps = []
             try:
-                similar_eps = self._episodic_search_smart(message, msg_emb, top_k=25)
+                similar_eps = self._episodic_search_smart(message, msg_emb, top_k=10)
             except Exception as e:
                 print(f"[Episodic Search] Error: {e}", file=sys.stderr, flush=True)
             
@@ -1887,7 +1890,7 @@ class NexusBrain:
         )
         return desc
 
-
+    def _activity_report(self) -> dict:
         """Reporte de actividad neuronal"""
         ep_stats  = self.episodic.stats()
         sem_stats = self.semantic.stats()
