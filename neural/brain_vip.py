@@ -1321,7 +1321,7 @@ class NexusBrain:
                 print("[Brain] Caché de relevancia limpiada", file=sys.stderr, flush=True)
 
             processing_time = time.time() - start_time
-            _q_str = f"{dynamic_quality:.2f}" if 'dynamic_quality' in dir() else "N/A"
+            _q_str = f"{dynamic_quality:.2f}" if 'dynamic_quality' in locals() else "N/A"
             print(f"[Brain] ✓ {processing_time:.2f}s | LLM: {self.llm_available} | quality: {_q_str}",
                   file=sys.stderr, flush=True)
 
@@ -1457,7 +1457,10 @@ class NexusBrain:
                 ctx_summary = np.zeros(EMBED_DIM, dtype=np.float32)
 
             # inp tiene tamaño EMBED_DIM + EMBED_DIM = 2*EMBED_DIM
-            inp    = np.concatenate([msg_emb, ctx_summary]).reshape(1, -1).astype(np.float32)
+            msg_emb_trunc = np.asarray(msg_emb).flatten()[:EMBED_DIM].astype(np.float32)
+            if msg_emb_trunc.shape[0] < EMBED_DIM:
+                msg_emb_trunc = np.pad(msg_emb_trunc, (0, EMBED_DIM - msg_emb_trunc.shape[0]))
+            inp    = np.concatenate([msg_emb_trunc, ctx_summary]).reshape(1, -1).astype(np.float32)
             target = np.array([[0.85]], dtype=np.float32)
             c_loss = self.context_net.train_step(inp, target)
             self._lr_step('context', self.context_net, c_loss)
