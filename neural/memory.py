@@ -287,21 +287,94 @@ class SemanticMemory:
 
     def learn_fact(self, concept: str, value: str, confidence: float = 0.7):
         """
-        Almacena un hecho con confianza.
-        MEJORADO: Mejor tracking de actualizaciones.
+        Almacena un hecho con confianza acumulativa progresiva.
+        MEJORADO: Ponderación más agresiva para retener info nueva con alta confianza.
         """
         existing = self.facts.get(concept, {})
         old_conf = existing.get('confidence', 0)
-        new_conf = old_conf * 0.6 + confidence * 0.4
-        
+        # Peso más agresivo: 70% nuevo, 30% viejo (era 40/60 invertido)
+        new_conf = old_conf * 0.3 + confidence * 0.7
+
         self.facts[concept] = {
             'value': value,
-            'confidence': round(new_conf, 3),
+            'confidence': round(min(new_conf, 1.0), 3),
             'ts': time.time(),
             'updates': existing.get('updates', 0) + 1
         }
-        
+
         print(f"[SemanticMemory] Hecho aprendido: {concept} = {value} (conf: {new_conf:.2f})", file=sys.stderr, flush=True)
+
+    def get_all_facts_for_context(self, min_confidence: float = 0.4) -> str:
+        """
+        Devuelve TODOS los hechos aprendidos como bloque de texto para inyectar al LLM.
+        Filtra por confianza mínima y ordena por confianza descendente.
+        """
+        if not self.facts:
+            return ""
+
+        # Labels legibles para cada tipo de hecho
+        LABELS = {
+            'user_name':       'Nombre del usuario',
+            'user_nickname':   'Apodo del usuario',
+            'user_alt_name':   'Nombre alternativo',
+            'user_age':        'Edad',
+            'user_birth_year': 'Año de nacimiento',
+            'user_birthday':   'Cumpleaños',
+            'user_location':   'Ubicación',
+            'user_country':    'País',
+            'user_neighborhood': 'Barrio/Sector',
+            'user_profession': 'Profesión',
+            'user_study':      'Estudios',
+            'user_workplace':  'Lugar de trabajo',
+            'user_seniority':  'Años de experiencia',
+            'fav_game':        'Juego favorito',
+            'gaming_platform': 'Plataforma de juego',
+            'gaming_character':'Personaje favorito',
+            'gaming_level':    'Nivel de juego',
+            'user_language':   'Idioma',
+            'learning_language':'Idioma que aprende',
+            'user_os':         'Sistema operativo',
+            'user_phone':      'Teléfono/Dispositivo',
+            'preference_like': 'Le gusta',
+            'preference_dislike': 'No le gusta',
+            'preference_fav':  'Favorito',
+            'interest':        'Interés',
+            'passion':         'Pasión',
+            'recent_purchase': 'Compra reciente',
+            'purchase_intent': 'Quiere comprar',
+        }
+
+        valid = [
+            (k, v) for k, v in self.facts.items()
+            if (v.get('confidence', 0) if isinstance(v, dict) else 0.5) >= min_confidence
+        ]
+        # Ordenar por confianza descendente
+        valid.sort(key=lambda x: (x[1].get('confidence', 0) if isinstance(x[1], dict) else 0.5), reverse=True)
+
+        lines = []
+        for key, entry in valid:
+            val  = entry.get('value', '') if isinstance(entry, dict) else entry
+            conf = entry.get('confidence', 0.5) if isinstance(entry, dict) else 0.5
+            label = LABELS.get(key, key.replace('_', ' ').capitalize())
+            if val:
+                lines.append(f"  • {label}: {val}  (confianza: {conf:.0%})")
+
+        # También añadir preferencias aprendidas
+        pref_lines = []
+        for k, v in sorted(self.preferences.items(), key=lambda x: x[1], reverse=True):
+            if v > 0.6:  # solo preferencias fuertes
+                pref_lines.append(f"  • Preferencia por '{k}': {v:.0%}")
+
+        result = ""
+        if lines:
+            result += "📚 Hechos aprendidos del usuario:\n" + "\n".join(lines)
+        if pref_lines:
+            result += "\n\n🎯 Preferencias detectadas:\n" + "\n".join(pref_lines[:20])
+        if self.query_clusters:
+            topics = list(self.query_clusters.keys())
+            result += f"\n\n🗂 Temas que el usuario ha explorado ({len(topics)} clusters): {', '.join(topics[:15])}"
+
+        return result
 
     def get_fact(self, concept: str) -> Optional[Dict]:
         """Obtiene un hecho específico"""
@@ -316,15 +389,15 @@ class SemanticMemory:
         return self.preferences.get(key, 0.5)
 
     def add_to_cluster(self, topic: str, query: str):
-        """Agrupa queries por tema"""
+        """Agrupa queries por tema — capacidad ×10"""
         if topic not in self.query_clusters:
             self.query_clusters[topic] = []
         if query not in self.query_clusters[topic]:
             self.query_clusters[topic].append(query)
-            if len(self.query_clusters[topic]) > 50:
-                self.query_clusters[topic] = self.query_clusters[topic][-50:]
+            if len(self.query_clusters[topic]) > 500:          # era 50 → ×10
+                self.query_clusters[topic] = self.query_clusters[topic][-500:]
 
-    def get_related_queries(self, topic: str, n: int = 5) -> List[str]:
+    def get_related_queries(self, topic: str, n: int = 50) -> List[str]:   # era 5 → ×10
         return self.query_clusters.get(topic, [])[-n:]
 
     def _load(self):
