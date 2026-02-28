@@ -845,14 +845,13 @@ class NexusBrain:
             {'in': 32,  'out': 16,  'act': 'sigmoid'},
         ], lr=0.0002)
 
-        # FIXED: context_net — ahora sí se entrena
+        # FIXED: context_net — entrada 2*EMBED_DIM (dinámica, no hardcodeada)
         self.context_net = DynamicNeuralNet([
-            {'in': 256+128, 'out': 1024, 'act': 'relu'},
-            {'in': 1024,    'out': 512,  'act': 'relu'},
-            {'in': 512,     'out': 256,  'act': 'relu'},
-            {'in': 256,     'out': 128,  'act': 'relu'},
-            {'in': 128,     'out': 64,   'act': 'relu'},
-            {'in': 64,      'out': 32,   'act': 'sigmoid'},
+            {'in': 2*EMBED_DIM, 'out': 512, 'act': 'relu'},
+            {'in': 512,         'out': 256, 'act': 'relu'},
+            {'in': 256,         'out': 128, 'act': 'relu'},
+            {'in': 128,         'out': 64,  'act': 'relu'},
+            {'in': 64,          'out': 32,  'act': 'sigmoid'},
         ], lr=0.00015)
 
         self.sentiment_net = DynamicNeuralNet([
@@ -1322,8 +1321,8 @@ class NexusBrain:
                 print("[Brain] Caché de relevancia limpiada", file=sys.stderr, flush=True)
 
             processing_time = time.time() - start_time
-            print(f"[Brain] ✓ {processing_time:.2f}s | LLM: {self.llm_available} | "
-                  f"quality: {dynamic_quality:.2f if 'dynamic_quality' in dir() else 'N/A'}",
+            _q_str = f"{dynamic_quality:.2f}" if 'dynamic_quality' in dir() else "N/A"
+            print(f"[Brain] ✓ {processing_time:.2f}s | LLM: {self.llm_available} | quality: {_q_str}",
                   file=sys.stderr, flush=True)
 
             return {
@@ -1446,15 +1445,19 @@ class NexusBrain:
             print(f"[TrainDialogue] Error: {e}", file=sys.stderr, flush=True)
 
     def _train_context_net(self, msg_emb: np.ndarray, resp_emb: np.ndarray):
-        """FIXED: context_net ahora se entrena en cada query"""
+        """FIXED: usa EMBED_DIM dinámico — sin hardcodear 256"""
         try:
             ctx_embs = self.working.context_embeddings()
             if len(ctx_embs) >= 2:
-                ctx_summary = np.mean(ctx_embs[-4:], axis=0)[:128].astype(np.float32)
+                # ctx_summary del mismo tamaño que EMBED_DIM
+                ctx_summary = np.mean(ctx_embs[-4:], axis=0)[:EMBED_DIM].astype(np.float32)
+                if ctx_summary.shape[0] < EMBED_DIM:
+                    ctx_summary = np.pad(ctx_summary, (0, EMBED_DIM - ctx_summary.shape[0]))
             else:
-                ctx_summary = np.zeros(128, dtype=np.float32)
+                ctx_summary = np.zeros(EMBED_DIM, dtype=np.float32)
 
-            inp    = np.concatenate([msg_emb[:256], ctx_summary]).reshape(1, -1).astype(np.float32)
+            # inp tiene tamaño EMBED_DIM + EMBED_DIM = 2*EMBED_DIM
+            inp    = np.concatenate([msg_emb, ctx_summary]).reshape(1, -1).astype(np.float32)
             target = np.array([[0.85]], dtype=np.float32)
             c_loss = self.context_net.train_step(inp, target)
             self._lr_step('context', self.context_net, c_loss)
