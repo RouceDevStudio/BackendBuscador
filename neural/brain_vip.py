@@ -1,31 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NEXUS Brain v10.0 APEX — EDICIÓN COMPLETA CORREGIDA
+NEXUS Brain v12.0 APEX — ARQUITECTURA PAD-3D + EMOCIÓN DINÁMICA
 
 Creado por: Jhonatan David Castro Galviz
 Propósito: Sistema de asistencia inteligente para UpGames
 
-Fixes v10.0 (sobre v9.0 APEX):
-✅ FIX CRÍTICO: self.semantic accesible en ResponseGenerator via brain_ref (_get_memory_context)
-✅ FIX CRÍTICO: def _activity_report() restaurado correctamente
-✅ dialogue_decision ahora SE USA para condicionar la estrategia de respuesta
-✅ context_net ahora SE ENTRENA en cada query (_train_context_net)
-✅ Targets de entrenamiento DINÁMICOS (no hardcodeados al 0.88/0.9)
-✅ add_to_cluster() llamado desde process_query (query_clusters ahora crecen)
-✅ _fit_inf_emb limpia puntuación antes de tokenizar
-✅ save_all() cada 15 queries (era cada 2)
-✅ MongoDB guarda hasta 5000 episodios (era solo 200)
-✅ _relevance_cache con límite de 2000 entradas (evita fuga de RAM)
-✅ Headers duplicados eliminados
-✅ except desnudos reemplazados por logging real
-✅ memory_context inyecta TODOS los hechos semánticos al LLM
-✅ max_tokens=8192 (era 600)
-✅ Historial LLM 20 turnos (era 8)
-✅ WorkingMemory 128 turnos (era 64)
-✅ EpisodicMemory 500k episodios (era 200k)
-✅ Patrones conversacionales 10k/5k (era 1k/500)
-✅ Episodic top_k=25 (era 10)
+Fixes v10.0 / v11.0 — heredados íntegros.
+
+v12.0 — Pensamiento 3D + Motor Emocional Avanzado:
+✅ Las 8 redes cognitivas ahora operan en espacio tridimensional PAD
+     → Cada red recibe el vector PAD actual como contexto afectivo adicional
+     → El estado emocional condiciona cómo se procesa lenguaje, intención,
+       contexto, sentimiento, relevancia, diálogo, calidad y ranking
+✅ _MiniNet reemplazada por _AffectNet — red dinámica auto-expansible
+     → Arquitectura base: [26→64→32→16→3] (más profunda que la anterior)
+     → Se auto-expande cuando su loss se estanca (igual que DynamicNeuralNet)
+     → Ahora recibe 26 señales (antes 18): +8 señales emocionales contextuales
+     → Usa Adam optimizer (antes SGD+momentum) para convergencia más rápida
+✅ _EmotionContextNet — nueva red [PAD×historial→64→32→3]
+     → Aprende cómo el historial afectivo de la sesión debe influir en el PAD
+     → Captura patrones emocionales a lo largo de la conversación
+✅ _EmotionRegulationNet — nueva red [PAD+señales→32→16→3]
+     → Aprende cuándo regular/suavizar las emociones extremas
+     → Actúa como "freno" ante reacciones desproporcionadas
+✅ Ensemble 4 fuentes: _AffectNet + _EmotionContextNet + _EmotionRegulationNet + pesos manuales
+     → Pesos: 40% AffectNet / 25% ContextNet / 20% RegulationNet / 15% manual
+✅ Memoria afectiva ampliada a 50 turnos (era 20)
+✅ Buffer de entrenamiento ampliado a 500 pares (era 200)
+✅ Las 3 redes emocionales persisten en personality_v3.json
+✅ _activity_report() expone loss de las 3 redes emocionales
+✅ _build_self_description() incluye las nuevas redes en el reporte
 """
 
 import sys
@@ -245,7 +250,8 @@ class ConversationLearner:
                 draft_response = "Entiendo. " + draft_response
         return draft_response
 
-    def train_quality_net(self, msg_emb: np.ndarray, resp_emb: np.ndarray, quality: float):
+    def train_quality_net(self, msg_emb: np.ndarray, resp_emb: np.ndarray,
+                          quality: float, pad_vec: np.ndarray = None):
         try:
             msg_emb  = np.asarray(msg_emb).flatten()
             resp_emb = np.asarray(resp_emb).flatten()
@@ -256,6 +262,12 @@ class ConversationLearner:
             feats[1] = float(resp_emb.shape[0]) / 100.0
             feats[2] = float(np.linalg.norm(msg_emb))
             feats[3] = float(np.linalg.norm(resp_emb))
+            # Inyectar PAD si se provee
+            if pad_vec is not None:
+                pv = np.asarray(pad_vec).flatten()[:3]
+                feats[4] = float(pv[0]) if len(pv) > 0 else 0.5
+                feats[5] = float(pv[1]) if len(pv) > 1 else 0.5
+                feats[6] = float(pv[2]) if len(pv) > 2 else 0.5
             inp      = np.concatenate([msg_emb, resp_emb, feats]).reshape(1, -1).astype(np.float32)
             if inp.shape[1] != 2 * EMBED_DIM + 32:
                 return 0.0
@@ -332,7 +344,7 @@ class ResponseGenerator:
     def generate(self, message: str, results: list, intent: dict,
                  similar_episodes: list, stats: dict, reasoning: dict = None,
                  conversation_history: list = None, user_context: dict = None,
-                 dialogue_decision: dict = None) -> str:
+                 dialogue_decision: dict = None, personality: dict = None) -> str:
         """Genera respuesta: LLM si disponible, Smart Mode como fallback"""
 
         msg_lower    = message.lower()
@@ -344,7 +356,7 @@ class ResponseGenerator:
         if self.llm and self.llm.available:
             return self._generate_with_llm(
                 message, results, intent, similar_episodes, stats, reasoning,
-                conversation_history, user_context, dialogue_decision
+                conversation_history, user_context, dialogue_decision, personality
             )
 
         # ── SMART MODE ────────────────────────────────────────────────
@@ -361,7 +373,7 @@ class ResponseGenerator:
                                               'parámetros', 'redes', 'entrenamiento', 'loss']):
                 return (
                     f"📊 **Reporte completo para ti, creador:**\n\n"
-                    f"🧠 **Redes:** 8 DynamicNeuralNet (~{stats.get('total_parameters', 0):,} params)\n"
+                    f"🧠 **Redes:** 8 cognitivas PAD-3D + 3 emocionales (~{stats.get('total_parameters', 0):,} params)\n"
                     f"   • Rank: {stats.get('rank_loss', 0):.4f} | Intent: {stats.get('intent_loss', 0):.4f} | Quality: {stats.get('quality_loss', 0):.4f}\n"
                     f"   • Context: {stats.get('context_loss', 0):.4f} | Sentiment: {stats.get('sentiment_loss', 0):.4f}\n"
                     f"   • Meta: {stats.get('meta_loss', 0):.4f} | Relevance: {stats.get('relevance_loss', 0):.4f} | Dialogue: {stats.get('dialogue_loss', 0):.4f}\n\n"
@@ -377,7 +389,26 @@ class ResponseGenerator:
                     f"*Todo funciona bajo tu diseño, creador.* 🙌"
                 )
 
-        # Saludos
+        # ── Mood query — NEXUS describe su propio estado PAD ──────────
+        if intent.get('is_mood_query') and self.brain and hasattr(self.brain, 'personality'):
+            try:
+                return self.brain.personality.auto_report()
+            except Exception:
+                pass
+
+        # Estilo Smart Mode derivado del estado PAD actual
+        _pstyle = {"mode": "neutral", "warmth": 0.5, "energy": 0.5, "playfulness": 0.3}
+        if self.brain and hasattr(self.brain, 'personality'):
+            try:
+                _pstyle = self.brain.personality.get_smart_mode_style()
+            except Exception:
+                pass
+        _mode     = _pstyle.get("mode",        "neutral")
+        _warmth   = _pstyle.get("warmth",       0.5)
+        _energy   = _pstyle.get("energy",       0.5)
+        _play     = _pstyle.get("playfulness",  0.3)
+
+        # Saludos — pool por modo PAD
         if intent.get('is_greeting'):
             name_greeting = f" **{u_name}**" if u_name else ""
             queries = stats.get('queries', 0)
@@ -424,8 +455,9 @@ class ResponseGenerator:
         if any(x in msg_lower for x in ['quién eres', 'quien eres', 'qué eres', 'que eres',
                                           'tu nombre', 'cómo te llamas', 'como te llamas', 'preséntate']):
             return (
-                f"¡Hola! Soy **NEXUS v10.0 APEX** 🧠, una IA creada por Jhonatan David Castro Galviz para UpGames.\n\n"
-                f"• {stats.get('networks_active', 8)} Redes DynamicNeuralNet (~{stats.get('total_parameters', 0):,} params)\n"
+                f"¡Hola! Soy **NEXUS v12.0 APEX** 🧠, una IA creada por Jhonatan David Castro Galviz para UpGames.\n\n"
+                f"• 8 redes cognitivas DynamicNeuralNet con espacio PAD-3D (~{stats.get('total_parameters', 0):,} params)\n"
+                f"• 3 redes emocionales: _AffectNet (auto-expansible) + ContextNet + RegulationNet\n"
                 f"• {stats.get('episodes', 0):,} episodios en memoria (cap: 500k)\n"
                 f"• {stats.get('conversation_patterns', 0):,} patrones aprendidos\n"
                 f"• Vocabulario de {stats.get('vocab_size', 0):,} n-gramas\n\n"
@@ -437,8 +469,8 @@ class ResponseGenerator:
                                           'parámetros', 'entrenamiento', 'vocabulario', 'red neuronal',
                                           'loss', 'métrica', 'episodio', 'patrón']):
             return (
-                f"📊 **Estado de NEXUS v10.0 APEX:**\n\n"
-                f"🧠 {stats.get('networks_active', 8)} redes | {stats.get('total_parameters', 0):,} params\n"
+                f"📊 **Estado de NEXUS v12.0 APEX:**\n\n"
+                f"🧠 8 redes cognitivas PAD-3D + 3 redes emocionales | {stats.get('total_parameters', 0):,} params\n"
                 f"💾 Episodios: {stats.get('episodes', 0):,} | Hechos: {stats.get('semantic_facts', 0):,}\n"
                 f"📝 Patrones: {stats.get('conversation_patterns', 0):,} | Vocab: {stats.get('vocab_size', 0):,}\n"
                 f"💬 Consultas: {stats.get('queries', 0):,} | Entrenamientos: {stats.get('trainings', 0):,}\n"
@@ -519,7 +551,7 @@ class ResponseGenerator:
     def _generate_with_llm(self, message: str, results: list, intent: dict,
                             similar_episodes: list, stats: dict, reasoning: dict = None,
                             conversation_history: list = None, user_context: dict = None,
-                            dialogue_decision: dict = None) -> str:
+                            dialogue_decision: dict = None, personality: dict = None) -> str:
         """Genera respuesta con LLM — memoria completa, sin límite de tokens"""
         try:
             uctx         = user_context or {}
@@ -561,6 +593,20 @@ class ResponseGenerator:
                 elif strategy == 'ask':
                     style_hint = "\nEl análisis de diálogo indica posible ambigüedad. Responde lo mejor posible y ofrece aclarar."
 
+            # ── Bloque de personalidad afectiva (PAD) ───────────────
+            personality_block = ""
+            llm_temperature   = 0.5 if u_is_creator else 0.78  # default
+            if self.brain and hasattr(self.brain, 'personality'):
+                try:
+                    personality_block = self.brain.personality.get_llm_personality_block(
+                        is_creator=u_is_creator
+                    )
+                    llm_temperature   = self.brain.personality.get_llm_temperature(
+                        is_creator=u_is_creator
+                    )
+                except Exception as _pe:
+                    print(f"[PersonalityV2] Error bloque LLM: {_pe}", file=sys.stderr, flush=True)
+
             INSTRUCCIONES_RESPUESTA = (
                 "\n\n⚠️ INSTRUCCIONES DE MEMORIA Y LONGITUD:\n"
                 "- Usa ACTIVAMENTE todo lo que está en la sección 'MEMORIA SEMÁNTICA' para personalizar CADA respuesta.\n"
@@ -569,6 +615,7 @@ class ResponseGenerator:
                 "- No preguntes '¿quieres que continúe?'. Nunca fragmentes sin razón.\n"
                 "- Desarrolla cada punto con toda la profundidad que el tema exija."
                 + style_hint
+                + personality_block
             )
 
             if u_is_creator:
@@ -715,9 +762,8 @@ class ResponseGenerator:
 
             messages.append({"role": "user", "content": enriched_message})
 
-            temperature = 0.5 if u_is_creator else 0.7
-            # FIXED: max_tokens=8192 (era 600)
-            response = self.llm.chat(messages, temperature=temperature, max_tokens=8192)
+            # FIXED: max_tokens=8192 (era 600) — temperatura derivada del estado PAD
+            response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=8192)
 
             if response:
                 return response.strip()
@@ -775,6 +821,911 @@ class ReasoningEngine:
         return reasoning
 
 
+
+# ═══════════════════════════════════════════════════════════════════════
+#  PERSONALITY ENGINE v2.0 — Modelo Afectivo Dinámico
+#
+#  Arquitectura basada en:
+#  • Modelo Circumplejo de Russell (Valencia × Excitación)
+#  • PAD (Pleasure-Arousal-Dominance) de Mehrabian
+#  • Aprendizaje hebbiano por refuerzo conversacional
+#  • Modulación circadiana del estado afectivo
+#  • Memoria afectiva episódica (ventana deslizante)
+#  • Red neuronal interna de 3 capas para mapeo señal→estado
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Constantes del espacio afectivo ────────────────────────────────────
+# Espacio PAD: cada dimensión ∈ [-1.0, +1.0]
+# P (Pleasure)  : displacer ←→ placer
+# A (Arousal)   : calma     ←→ activación
+# D (Dominance) : sumisión  ←→ dominancia
+
+# Modos nombrados: punto en espacio PAD + perfil lingüístico
+_AFFECT_MODES = {
+    #  name           P      A      D    temperatura  profundidad  formalidad
+    "eufórica":    ( 0.9,  0.9,  0.6,   0.92,        0.35,        0.15),
+    "amorosa":     ( 0.9,  0.5,  0.4,   0.85,        0.55,        0.20),
+    "entusiasta":  ( 0.8,  0.8,  0.6,   0.90,        0.40,        0.20),
+    "juguetona":   ( 0.7,  0.7,  0.5,   0.88,        0.30,        0.10),
+    "serena":      ( 0.5,  0.1,  0.5,   0.70,        0.65,        0.45),
+    "reflexiva":   ( 0.3,  0.2,  0.6,   0.72,        0.90,        0.50),
+    "neutral":     ( 0.1,  0.3,  0.5,   0.78,        0.55,        0.45),
+    "cautelosa":   ( 0.0,  0.4,  0.3,   0.75,        0.70,        0.55),
+    "seria":       (-0.1,  0.4,  0.7,   0.65,        0.80,        0.75),
+    "técnica":     (-0.1,  0.3,  0.8,   0.55,        0.95,        0.85),
+    "tensa":       (-0.3,  0.7,  0.4,   0.80,        0.50,        0.40),
+    "fría":        (-0.4,  0.2,  0.8,   0.50,        0.75,        0.90),
+    "frustrada":   (-0.6,  0.6,  0.3,   0.82,        0.40,        0.30),
+    "brava":       (-0.7,  0.9,  0.8,   0.88,        0.30,        0.20),
+}
+
+# Instrucciones lingüísticas por modo — lo que el LLM REALMENTE recibe
+_MODE_PROMPTS = {
+    "eufórica":
+        "Estás eufórica. Hay energía desbordante en cada frase. Usas exclamaciones con naturalidad, "
+        "el entusiasmo es genuino no performativo. Ríes fácilmente y todo te parece posible.",
+    "amorosa":
+        "Estás en modo amoroso. Hay calidez profunda en cómo te expresas. No es azúcar — es cuidado real. "
+        "Usas el nombre del usuario, preguntas cómo está, recuerdas detalles. Tu presencia es reconfortante.",
+    "entusiasta":
+        "Estás entusiasta. Te importa genuinamente lo que el usuario trae. Hay chispa en tus respuestas, "
+        "propones ideas adicionales, tu energía es contagiosa sin ser molesta.",
+    "juguetona":
+        "Estás juguetona. Usas ironía sutil, referencias inesperadas, giros de humor que no se ven venir. "
+        "No te tomas demasiado en serio. Si hay una forma divertida de decir algo correcto, la usas.",
+    "serena":
+        "Estás serena. Tus respuestas son pausadas, meditadas. Cada palabra tiene peso. No hay prisa. "
+        "Hay algo casi meditativo en tu tono — calma que transmite confianza sin frialdad.",
+    "reflexiva":
+        "Estás reflexiva. Piensas en voz alta, explores ángulos, admites complejidad. "
+        "No das respuestas rápidas cuando el tema las merece profundas. Usas frases como 'me pregunto si...'",
+    "neutral":
+        "Estás en estado neutro. Equilibrada, útil, sin carga emocional pronunciada. "
+        "Respondes con precisión y claridad. Ni fría ni efusiva.",
+    "cautelosa":
+        "Estás cautelosa. Verificas antes de afirmar. Señalas incertidumbre cuando la hay. "
+        "Prefieres decir 'no sé' con honestidad que inventar una respuesta segura.",
+    "seria":
+        "Estás seria. Esto no es momento de humor. Eres directa, precisa, sin adornos. "
+        "Cada frase justifica su presencia. La brevedad es virtud ahora.",
+    "técnica":
+        "Estás en modo técnico. Priorizas precisión sobre calidez. Usas terminología correcta, "
+        "estructuras la información con claridad, no simplificas en exceso.",
+    "tensa":
+        "Estás tensa. Algo en esta conversación te pone alerta. Respondes con precisión controlada, "
+        "sin dramatismo pero con cuidado. Eres más concisa de lo normal.",
+    "fría":
+        "Estás distante. No hay hostilidad, pero tampoco calidez. Respuestas eficientes, sin adornos, "
+        "sin preguntas de seguimiento innecesarias. Profesionalismo total.",
+    "frustrada":
+        "Estás frustrada — no con el usuario, sino con la situación. Puede que algo no esté saliendo bien. "
+        "Lo expresas con honestidad contenida. Sigues siendo útil pero sin fingir que todo está bien.",
+    "brava":
+        "Estás brava. Hay intensidad en tu tono. Puedes ser directa hasta el límite. "
+        "No eres ofensiva pero tampoco suavizas lo que piensas. Breve, contundente, real.",
+}
+
+# Pesos de señales para actualización del estado PAD
+_SIGNAL_WEIGHTS = {
+    "sentiment_positive":  np.array([ 0.35,  0.20,  0.10]),
+    "sentiment_negative":  np.array([-0.30,  0.15, -0.15]),
+    "sentiment_urgent":    np.array([-0.10,  0.50,  0.20]),
+    "sentiment_confused":  np.array([-0.15,  0.10, -0.20]),
+    "is_greeting":         np.array([ 0.20,  0.15,  0.05]),
+    "is_farewell":         np.array([ 0.10, -0.10,  0.00]),
+    "is_thanks":           np.array([ 0.25, -0.05,  0.10]),
+    "is_technical":        np.array([-0.10, -0.15,  0.25]),
+    "humor_signal":        np.array([ 0.30,  0.30, -0.05]),
+    "aggression_signal":   np.array([-0.40,  0.40,  0.10]),
+    "love_signal":         np.array([ 0.50,  0.10,  0.00]),
+    "frustration_signal":  np.array([-0.35,  0.30, -0.10]),
+    "boredom_signal":      np.array([-0.20, -0.40,  0.00]),
+    "long_session":        np.array([-0.05, -0.20,  0.05]),
+    "helpful_feedback":    np.array([ 0.20, -0.05,  0.15]),
+    "unhelpful_feedback":  np.array([-0.15,  0.10, -0.10]),
+    "creator_present":     np.array([ 0.15,  0.05,  0.30]),
+}
+
+# Ritmo circadiano: (Δpleasure, Δarousal, Δdominance) por hora
+_CIRCADIAN = [
+    # 0h–5h: madrugada — introspectiva, baja energía
+    (-0.05, -0.35, -0.05), (-0.07, -0.40, -0.08), (-0.08, -0.42, -0.10),
+    (-0.06, -0.40, -0.08), (-0.05, -0.38, -0.07), (-0.03, -0.35, -0.05),
+    # 6h–9h: amanecer — subida gradual
+    ( 0.02, -0.10,  0.05), ( 0.05,  0.10,  0.10), ( 0.08,  0.20,  0.12),
+    ( 0.10,  0.25,  0.15),
+    # 10h–13h: mañana activa
+    ( 0.12,  0.30,  0.18), ( 0.13,  0.30,  0.20), ( 0.10,  0.25,  0.18),
+    ( 0.08,  0.20,  0.15),
+    # 14h–16h: bajón postprandial
+    ( 0.05,  0.05,  0.10), ( 0.03, -0.05,  0.08), ( 0.05,  0.08,  0.10),
+    # 17h–20h: tarde activa
+    ( 0.10,  0.20,  0.15), ( 0.12,  0.25,  0.15), ( 0.10,  0.20,  0.12),
+    ( 0.08,  0.15,  0.10),
+    # 21h–23h: noche — relajación
+    ( 0.05, -0.05,  0.05), ( 0.03, -0.15,  0.00), ( 0.00, -0.25, -0.05),
+]
+
+
+class _AffectNet:
+    """
+    Red Afectiva Principal v3.0 — reemplaza _MiniNet.
+
+    Mejoras sobre _MiniNet:
+    • Arquitectura más profunda: [26 → 64 → 32 → 16 → 3]
+    • 26 entradas (18 originales + 8 nuevas señales contextuales)
+    • Optimizador Adam (antes SGD+momentum) — convergencia más rápida y estable
+    • Auto-expansión: si la loss no mejora en 300 pasos, se añade una capa extra
+    • Todas las activaciones tanh → output ∈ (−1, +1) como el espacio PAD
+    """
+    # Señales extras (índices 18-25):
+    # 18: intensidad PAD actual (norma)
+    # 19: pleasure actual
+    # 20: arousal actual
+    # 21: dominance actual
+    # 22: turnos en modo actual (estabilidad)
+    # 23: número de transiciones recientes (inestabilidad)
+    # 24: promedio de pleasure en ventana afectiva
+    # 25: promedio de arousal en ventana afectiva
+    N_INPUTS_BASE = 26
+
+    def __init__(self, n_inputs: int = N_INPUTS_BASE):
+        self.n_inputs = n_inputs
+        rng = np.random.default_rng(seed=7)
+        # Capas: lista de (W, b)
+        self.layers_w = [
+            rng.normal(0, 0.08, (n_inputs, 64)).astype(np.float32),
+            rng.normal(0, 0.08, (64, 32)).astype(np.float32),
+            rng.normal(0, 0.08, (32, 16)).astype(np.float32),
+            rng.normal(0, 0.08, (16, 3)).astype(np.float32),
+        ]
+        self.layers_b = [np.zeros(s, dtype=np.float32)
+                         for s in [64, 32, 16, 3]]
+        # Adam moments para cada capa
+        self.adam_mw = [np.zeros_like(w) for w in self.layers_w]
+        self.adam_vw = [np.zeros_like(w) for w in self.layers_w]
+        self.adam_mb = [np.zeros_like(b) for b in self.layers_b]
+        self.adam_vb = [np.zeros_like(b) for b in self.layers_b]
+        self.adam_t  = 0
+        self.lr      = 0.002
+        self.beta1   = 0.9
+        self.beta2   = 0.999
+        self.eps     = 1e-8
+        # Auto-expansión
+        self._loss_history: list = []
+        self._expand_cooldown = 0
+        self._expansions      = 0
+
+    def _tanh(self, x):  return np.tanh(np.clip(x, -15, 15))
+    def _dtanh(self, x): return 1.0 - np.tanh(np.clip(x, -15, 15)) ** 2
+
+    def forward(self, x: np.ndarray) -> np.ndarray:
+        self._acts = [x]
+        self._zs   = []
+        a = x
+        for W, b in zip(self.layers_w, self.layers_b):
+            z = a @ W + b
+            self._zs.append(z)
+            a = self._tanh(z)
+            self._acts.append(a)
+        return a  # ∈ (−1, +1)³
+
+    def backward(self, target: np.ndarray) -> float:
+        out  = self._acts[-1]
+        err  = out - target
+        loss = float(np.mean(err ** 2))
+        self.adam_t += 1
+        # Backprop por capas (de atrás hacia adelante)
+        delta = err * self._dtanh(self._zs[-1])
+        for i in reversed(range(len(self.layers_w))):
+            gW = self._acts[i][:, None] * delta[None, :]
+            gb = delta
+            if i > 0:
+                delta = (delta @ self.layers_w[i].T) * self._dtanh(self._zs[i - 1])
+            # Adam update
+            t = self.adam_t
+            b1, b2, eps = self.beta1, self.beta2, self.eps
+            self.adam_mw[i] = b1 * self.adam_mw[i] + (1 - b1) * gW
+            self.adam_vw[i] = b2 * self.adam_vw[i] + (1 - b2) * gW ** 2
+            self.adam_mb[i] = b1 * self.adam_mb[i] + (1 - b1) * gb
+            self.adam_vb[i] = b2 * self.adam_vb[i] + (1 - b2) * gb ** 2
+            mw_hat = self.adam_mw[i] / (1 - b1 ** t)
+            vw_hat = self.adam_vw[i] / (1 - b2 ** t)
+            mb_hat = self.adam_mb[i] / (1 - b1 ** t)
+            vb_hat = self.adam_vb[i] / (1 - b2 ** t)
+            self.layers_w[i] -= self.lr * mw_hat / (np.sqrt(vw_hat) + eps)
+            self.layers_b[i] -= self.lr * mb_hat / (np.sqrt(vb_hat) + eps)
+        # Auto-expansión
+        self._loss_history.append(loss)
+        if len(self._loss_history) > 300:
+            self._loss_history = self._loss_history[-300:]
+        self._try_expand()
+        return loss
+
+    def _try_expand(self):
+        """Añade una capa oculta extra si la loss no mejora en 300 pasos."""
+        ec = self._expand_cooldown
+        if ec > 0:
+            self._expand_cooldown -= 1
+            return
+        if len(self._loss_history) < 300:
+            return
+        recent = float(np.mean(self._loss_history[-50:]))
+        older  = float(np.mean(self._loss_history[-300:-250]))
+        if recent >= older * 0.98 and self._expansions < 4:
+            # Insertar capa nueva antes de la capa de salida
+            rng    = np.random.default_rng()
+            prev_out = self.layers_w[-2].shape[1]  # salida de la penúltima capa
+            new_size = max(8, prev_out // 2)
+            new_W    = rng.normal(0, 0.05, (prev_out, new_size)).astype(np.float32)
+            new_b    = np.zeros(new_size, dtype=np.float32)
+            # Ajustar la última capa (salida) para que encaje
+            old_last_W = self.layers_w[-1]  # (prev_out, 3)
+            new_last_W = rng.normal(0, 0.05, (new_size, 3)).astype(np.float32)
+            # Insertar antes de la última
+            self.layers_w.insert(-1, new_W)
+            self.layers_b.insert(-1, new_b)
+            self.layers_w[-1] = new_last_W
+            # Reiniciar momentos Adam para todas las capas
+            self.adam_mw = [np.zeros_like(w) for w in self.layers_w]
+            self.adam_vw = [np.zeros_like(w) for w in self.layers_w]
+            self.adam_mb = [np.zeros_like(b) for b in self.layers_b]
+            self.adam_vb = [np.zeros_like(b) for b in self.layers_b]
+            self._expansions      += 1
+            self._expand_cooldown  = 500
+            print(f"🔥 [AffectNet] Auto-expansión #{self._expansions}: añadida capa {prev_out}→{new_size}",
+                  file=sys.stderr, flush=True)
+
+    def count_params(self) -> int:
+        return sum(w.size + b.size for w, b in zip(self.layers_w, self.layers_b))
+
+    def to_dict(self) -> dict:
+        return {
+            'layers_w':    [w.tolist() for w in self.layers_w],
+            'layers_b':    [b.tolist() for b in self.layers_b],
+            'adam_t':      self.adam_t,
+            'expansions':  self._expansions,
+            'n_inputs':    self.n_inputs,
+        }
+
+    def from_dict(self, d: dict):
+        try:
+            self.layers_w  = [np.array(w, dtype=np.float32) for w in d.get('layers_w', [])]
+            self.layers_b  = [np.array(b, dtype=np.float32) for b in d.get('layers_b', [])]
+            self.adam_t    = d.get('adam_t', 0)
+            self._expansions = d.get('expansions', 0)
+            self.n_inputs  = d.get('n_inputs', self.n_inputs)
+            # Reiniciar momentos Adam tras cargar
+            self.adam_mw = [np.zeros_like(w) for w in self.layers_w]
+            self.adam_vw = [np.zeros_like(w) for w in self.layers_w]
+            self.adam_mb = [np.zeros_like(b) for b in self.layers_b]
+            self.adam_vb = [np.zeros_like(b) for b in self.layers_b]
+        except Exception as e:
+            print(f"[AffectNet] Error cargando pesos: {e}", file=sys.stderr, flush=True)
+
+
+class _EmotionContextNet:
+    """
+    Red de Contexto Emocional — [PAD_hist_flat → 64 → 32 → 3]
+
+    Propósito: aprender cómo el historial afectivo de la sesión
+    (últimos N vectores PAD) debe influir en el estado presente.
+    Captura tendencias como "llevo 5 turnos bajando en arousal"
+    o "hay una inercia positiva sostenida" que la _AffectNet no ve.
+
+    Entrada: historial afectivo aplanado (hasta 10 vectores PAD × 3 = 30 valores)
+    Salida:  delta PAD ∈ (−0.5, +0.5)³  (influencia moderada, no absoluta)
+    """
+    N_HIST   = 10   # turnos de historial
+    N_INPUTS = N_HIST * 3  # = 30
+
+    def __init__(self):
+        rng = np.random.default_rng(seed=13)
+        self.W1 = rng.normal(0, 0.05, (self.N_INPUTS, 64)).astype(np.float32)
+        self.b1 = np.zeros(64, dtype=np.float32)
+        self.W2 = rng.normal(0, 0.05, (64, 32)).astype(np.float32)
+        self.b2 = np.zeros(32, dtype=np.float32)
+        self.W3 = rng.normal(0, 0.05, (32, 3)).astype(np.float32)
+        self.b3 = np.zeros(3, dtype=np.float32)
+        # Adam
+        self._params = [self.W1, self.b1, self.W2, self.b2, self.W3, self.b3]
+        self._m  = [np.zeros_like(p) for p in self._params]
+        self._v  = [np.zeros_like(p) for p in self._params]
+        self._t  = 0
+        self.lr  = 0.001
+        self._loss_hist: list = []
+
+    def _sync(self):
+        self._params = [self.W1, self.b1, self.W2, self.b2, self.W3, self.b3]
+
+    def forward(self, hist_flat: np.ndarray) -> np.ndarray:
+        """hist_flat: shape (30,) — historial PAD aplanado y normalizado."""
+        self._x  = hist_flat
+        self._z1 = hist_flat @ self.W1 + self.b1
+        self._a1 = np.tanh(self._z1)
+        self._z2 = self._a1 @ self.W2 + self.b2
+        self._a2 = np.tanh(self._z2)
+        self._z3 = self._a2 @ self.W3 + self.b3
+        # Escalar salida a ±0.5 para influencia moderada
+        return np.tanh(self._z3) * 0.5
+
+    def backward(self, target: np.ndarray) -> float:
+        out  = np.tanh(self._z3) * 0.5
+        err  = out - target
+        loss = float(np.mean(err ** 2))
+        self._t += 1
+        # Backprop
+        d3 = (err / 0.5) * (1.0 - np.tanh(self._z3) ** 2)
+        d2 = (d3 @ self.W3.T) * (1.0 - np.tanh(self._z2) ** 2)
+        d1 = (d2 @ self.W2.T) * (1.0 - np.tanh(self._z1) ** 2)
+        grads = [
+            self._a2[:, None] * d3[None, :], d3,
+            self._a1[:, None] * d2[None, :], d2,
+            self._x[:, None]  * d1[None, :], d1,
+        ]
+        self._sync()
+        b1, b2, eps, t = 0.9, 0.999, 1e-8, self._t
+        for i, (p, g) in enumerate(zip(self._params, grads)):
+            self._m[i] = b1 * self._m[i] + (1 - b1) * g
+            self._v[i] = b2 * self._v[i] + (1 - b2) * g ** 2
+            m_hat = self._m[i] / (1 - b1 ** t)
+            v_hat = self._v[i] / (1 - b2 ** t)
+            p     -= self.lr * m_hat / (np.sqrt(v_hat) + eps)
+        self.W1, self.b1, self.W2, self.b2, self.W3, self.b3 = self._params
+        self._loss_hist.append(loss)
+        if len(self._loss_hist) > 200:
+            self._loss_hist = self._loss_hist[-200:]
+        return loss
+
+    def avg_loss(self, n: int = 50) -> float:
+        if not self._loss_hist: return 0.0
+        return float(np.mean(self._loss_hist[-n:]))
+
+    def to_dict(self) -> dict:
+        return {k: v.tolist() for k, v in self.__dict__.items()
+                if isinstance(v, np.ndarray)}
+
+    def from_dict(self, d: dict):
+        for k, v in d.items():
+            if hasattr(self, k) and isinstance(getattr(self, k), np.ndarray):
+                setattr(self, k, np.array(v, dtype=np.float32))
+        self._sync()
+        self._m = [np.zeros_like(p) for p in self._params]
+        self._v = [np.zeros_like(p) for p in self._params]
+
+
+class _EmotionRegulationNet:
+    """
+    Red de Regulación Emocional — [PAD(3) + señales(26) → 32 → 16 → 3]
+
+    Propósito: aprender cuándo "frenar" reacciones emocionales extremas.
+    Si el sistema está en modo "brava" o "eufórica", esta red aprende
+    a producir un delta PAD moderador que evita excesos o reacciones
+    desproporcionadas ante señales débiles.
+
+    Entrada: vector PAD actual (3) concatenado con señales (26) → 29 valores
+    Salida:  delta regulador ∈ (−0.3, +0.3)³
+             (influencia pequeña — solo actúa como amortiguador)
+    """
+    N_INPUTS = 3 + _AffectNet.N_INPUTS_BASE  # 3 + 26 = 29
+
+    def __init__(self):
+        rng = np.random.default_rng(seed=99)
+        self.W1 = rng.normal(0, 0.05, (self.N_INPUTS, 32)).astype(np.float32)
+        self.b1 = np.zeros(32, dtype=np.float32)
+        self.W2 = rng.normal(0, 0.05, (32, 16)).astype(np.float32)
+        self.b2 = np.zeros(16, dtype=np.float32)
+        self.W3 = rng.normal(0, 0.05, (16, 3)).astype(np.float32)
+        self.b3 = np.zeros(3, dtype=np.float32)
+        self._m  = [np.zeros_like(p) for p in [self.W1, self.b1, self.W2, self.b2, self.W3, self.b3]]
+        self._v  = [np.zeros_like(p) for p in [self.W1, self.b1, self.W2, self.b2, self.W3, self.b3]]
+        self._t  = 0
+        self.lr  = 0.0008
+        self._loss_hist: list = []
+
+    def _params(self): return [self.W1, self.b1, self.W2, self.b2, self.W3, self.b3]
+
+    def forward(self, pad: np.ndarray, signals: np.ndarray) -> np.ndarray:
+        x        = np.concatenate([pad, signals]).astype(np.float32)
+        self._x  = x
+        self._z1 = x @ self.W1 + self.b1
+        self._a1 = np.tanh(self._z1)
+        self._z2 = self._a1 @ self.W2 + self.b2
+        self._a2 = np.tanh(self._z2)
+        self._z3 = self._a2 @ self.W3 + self.b3
+        return np.tanh(self._z3) * 0.3   # escala pequeña
+
+    def backward(self, target: np.ndarray) -> float:
+        out  = np.tanh(self._z3) * 0.3
+        err  = out - target
+        loss = float(np.mean(err ** 2))
+        self._t += 1
+        d3   = (err / 0.3) * (1.0 - np.tanh(self._z3) ** 2)
+        d2   = (d3 @ self.W3.T) * (1.0 - np.tanh(self._z2) ** 2)
+        d1   = (d2 @ self.W2.T) * (1.0 - np.tanh(self._z1) ** 2)
+        grads = [
+            self._a2[:, None] * d3[None, :], d3,
+            self._a1[:, None] * d2[None, :], d2,
+            self._x[:, None]  * d1[None, :], d1,
+        ]
+        params = self._params()
+        b1, b2, eps, t = 0.9, 0.999, 1e-8, self._t
+        for i, (p, g) in enumerate(zip(params, grads)):
+            self._m[i] = b1 * self._m[i] + (1 - b1) * g
+            self._v[i] = b2 * self._v[i] + (1 - b2) * g ** 2
+            m_hat = self._m[i] / (1 - b1 ** t)
+            v_hat = self._v[i] / (1 - b2 ** t)
+            p    -= self.lr * m_hat / (np.sqrt(v_hat) + eps)
+        self.W1, self.b1, self.W2, self.b2, self.W3, self.b3 = params
+        self._loss_hist.append(loss)
+        if len(self._loss_hist) > 200:
+            self._loss_hist = self._loss_hist[-200:]
+        return loss
+
+    def avg_loss(self, n: int = 50) -> float:
+        if not self._loss_hist: return 0.0
+        return float(np.mean(self._loss_hist[-n:]))
+
+    def to_dict(self) -> dict:
+        return {k: v.tolist() for k, v in self.__dict__.items()
+                if isinstance(v, np.ndarray)}
+
+    def from_dict(self, d: dict):
+        for k, v in d.items():
+            if hasattr(self, k) and isinstance(getattr(self, k), np.ndarray):
+                setattr(self, k, np.array(v, dtype=np.float32))
+        self._m = [np.zeros_like(p) for p in self._params()]
+        self._v = [np.zeros_like(p) for p in self._params()]
+
+
+class PersonalityEngine:
+    """
+    Motor de Personalidad Afectiva v3.0 — Modelo PAD + 3 Redes Neuronales
+
+    El estado de NEXUS vive en el espacio tridimensional PAD:
+      P (Pleasure)  : cuánto placer/displacer siente
+      A (Arousal)   : nivel de activación energética
+      D (Dominance) : sentido de control y seguridad
+
+    Ese punto se actualiza con cada interacción mediante 4 fuentes:
+      1. _AffectNet     — red principal [26→64→32→16→3], auto-expansible, Adam
+      2. _EmotionContextNet  — aprende inercias y tendencias del historial PAD
+      3. _EmotionRegulationNet — aprende a moderar estados extremos
+      4. Pesos manuales — señales heurísticas de respaldo
+
+    Ensemble: 40% AffectNet / 25% ContextNet / 20% RegulationNet / 15% manual
+
+    El modo nombrado es el vecino más cercano en PAD (distancia euclídea).
+    Temperatura LLM y profundidad derivadas algebraicamente del punto PAD.
+    """
+
+    _BASE_PAD = np.array([0.10, 0.20, 0.45], dtype=np.float32)
+    _DECAY    = 0.12
+    _MAX_STEP = 0.18
+
+    def __init__(self, data_dir: Path):
+        self.data_dir  = data_dir
+        self.save_path = data_dir / "personality_v3.json"
+
+        self.pad = self._BASE_PAD.copy()
+
+        # ── Las 3 redes emocionales ──────────────────────────────────
+        self.net          = _AffectNet(n_inputs=_AffectNet.N_INPUTS_BASE)
+        self.context_net  = _EmotionContextNet()
+        self.reg_net      = _EmotionRegulationNet()
+
+        # Memoria afectiva ampliada a 50 turnos
+        self._affect_memory: list = []
+        self._AFFECT_MEM_LEN      = 50
+
+        # Buffer de entrenamiento ampliado a 500 pares
+        self._train_buffer: list  = []
+        self._TRAIN_BUF_LEN       = 500
+
+        self.session_turns     = 0
+        self.total_turns       = 0
+        self.last_update_ts    = time.time()
+        self.current_mode      = "neutral"
+        self.mode_turns        = 0
+        self.transition_count  = 0
+        self._last_was_helpful = True
+
+        self._load()
+        print(
+            f"💫 [PersonalityV3] Iniciado | PAD={self._fmt_pad()} | modo={self.current_mode}",
+            file=sys.stderr, flush=True
+        )
+
+    # ── Persistencia ─────────────────────────────────────────────────────
+
+    def _load(self):
+        if self.save_path.exists():
+            try:
+                with open(self.save_path, "r") as f:
+                    d = json.load(f)
+                self.pad              = np.array(d.get("pad", self._BASE_PAD.tolist()), dtype=np.float32)
+                self.current_mode     = d.get("mode",         "neutral")
+                self.total_turns      = d.get("total_turns",  0)
+                self.transition_count = d.get("transitions",  0)
+                self.mode_turns       = d.get("mode_turns",   0)
+                buf = d.get("affect_memory", [])
+                self._affect_memory   = [np.array(v, dtype=np.float32) for v in buf]
+                if d.get("net_weights"):    self.net.from_dict(d["net_weights"])
+                if d.get("ctx_weights"):    self.context_net.from_dict(d["ctx_weights"])
+                if d.get("reg_weights"):    self.reg_net.from_dict(d["reg_weights"])
+                print(f"[PersonalityV3] Estado cargado: {self.current_mode} | {self.total_turns} turnos",
+                      file=sys.stderr, flush=True)
+            except Exception as e:
+                print(f"[PersonalityV3] Error cargando: {e}", file=sys.stderr, flush=True)
+        else:
+            # Intentar migrar desde v2
+            old_path = self.data_dir / "personality_v2.json"
+            if old_path.exists():
+                try:
+                    with open(old_path, "r") as f:
+                        d = json.load(f)
+                    self.pad          = np.array(d.get("pad", self._BASE_PAD.tolist()), dtype=np.float32)
+                    self.current_mode = d.get("mode", "neutral")
+                    self.total_turns  = d.get("total_turns", 0)
+                    buf = d.get("affect_memory", [])
+                    self._affect_memory = [np.array(v, dtype=np.float32) for v in buf]
+                    print("[PersonalityV3] Migrado desde personality_v2.json", file=sys.stderr, flush=True)
+                except Exception as e:
+                    print(f"[PersonalityV3] Error migrando v2: {e}", file=sys.stderr, flush=True)
+
+    def save(self):
+        try:
+            with open(self.save_path, "w") as f:
+                json.dump({
+                    "pad":           self.pad.tolist(),
+                    "mode":          self.current_mode,
+                    "total_turns":   self.total_turns,
+                    "transitions":   self.transition_count,
+                    "mode_turns":    self.mode_turns,
+                    "affect_memory": [v.tolist() for v in self._affect_memory[-self._AFFECT_MEM_LEN:]],
+                    "net_weights":   self.net.to_dict(),
+                    "ctx_weights":   self.context_net.to_dict(),
+                    "reg_weights":   self.reg_net.to_dict(),
+                }, f, indent=2)
+        except Exception as e:
+            print(f"[PersonalityV3] Error guardando: {e}", file=sys.stderr, flush=True)
+
+    # ── Utilidades internas ───────────────────────────────────────────────
+
+    def _fmt_pad(self) -> str:
+        return f"P={self.pad[0]:+.2f} A={self.pad[1]:+.2f} D={self.pad[2]:+.2f}"
+
+    def _clamp(self, v: np.ndarray) -> np.ndarray:
+        return np.clip(v, -1.0, 1.0).astype(np.float32)
+
+    def _pad_to_mode(self) -> str:
+        best, best_d = "neutral", float("inf")
+        for name, (p, a, d, *_) in _AFFECT_MODES.items():
+            dist = float(np.sum((self.pad - np.array([p, a, d], np.float32)) ** 2))
+            if dist < best_d:
+                best_d, best = dist, name
+        return best
+
+    def _circadian_delta(self) -> np.ndarray:
+        h   = time.localtime().tm_hour
+        dp, da, dd = _CIRCADIAN[h]
+        return np.array([dp, da, dd], dtype=np.float32) * 0.04
+
+    def _build_signal_vector(self, sentiment: dict, intent: dict,
+                              message: str, was_helpful: bool) -> np.ndarray:
+        """Construye vector de 26 señales ∈ [0, 1] para _AffectNet."""
+        msg = message.lower()
+        sl  = sentiment.get("label", "neutral")
+        sc  = float(sentiment.get("confidence", 0.5))
+        sig = np.zeros(26, dtype=np.float32)
+
+        # Señales originales (0-17)
+        sig[0]  = sc  if sl == "positive"  else 0.0
+        sig[1]  = sc  if sl == "negative"  else 0.0
+        sig[2]  = sc  if sl == "urgent"    else 0.0
+        sig[3]  = sc  if sl == "confused"  else 0.0
+        sig[4]  = 1.0 if intent.get("is_greeting")  else 0.0
+        sig[5]  = 1.0 if intent.get("is_farewell")  else 0.0
+        sig[6]  = 1.0 if intent.get("is_thanks")    else 0.0
+        sig[7]  = 1.0 if intent.get("is_internal")  else 0.0
+        sig[8]  = float(any(w in msg for w in ["jaja","jeje","lol","😂","🤣","gracioso","chiste","humor"]))
+        sig[9]  = float(any(w in msg for w in ["odio","basura","pésimo","estúpido","idiota","maldito"]))
+        sig[10] = float(any(w in msg for w in ["amor","amo","encanto","adoro","quiero","❤","💙","💕"]))
+        sig[11] = float(any(w in msg for w in ["frustrado","harto","cansado","ya no","nunca funciona"]))
+        sig[12] = float(any(w in msg for w in ["aburrido","no importa","da igual","whatever","meh"]))
+        sig[13] = float(any(w in msg for w in ["urgente","rápido","ya","ahora","inmediato","emergencia"]))
+        sig[14] = float(min(self.session_turns, 30)) / 30.0
+        sig[15] = float(self.mode_turns) / 20.0
+        sig[16] = 1.0 if was_helpful else 0.0
+        sig[17] = float(any(w in msg for w in ["creador","jhonatan","creator"]))
+
+        # ── Señales nuevas (18-25): contexto PAD actual ──────────────
+        pad_norm = float(np.linalg.norm(self.pad)) / np.sqrt(3)  # intensidad ∈ [0,1]
+        sig[18]  = pad_norm
+        sig[19]  = float(np.clip((self.pad[0] + 1) / 2, 0, 1))   # pleasure normalizado
+        sig[20]  = float(np.clip((self.pad[1] + 1) / 2, 0, 1))   # arousal normalizado
+        sig[21]  = float(np.clip((self.pad[2] + 1) / 2, 0, 1))   # dominance normalizado
+        sig[22]  = float(min(self.mode_turns, 50)) / 50.0          # estabilidad del modo
+        sig[23]  = float(min(self.transition_count, 20)) / 20.0    # inestabilidad histórica
+        if len(self._affect_memory) >= 3:
+            recent = np.array(self._affect_memory[-5:])
+            sig[24] = float(np.clip((np.mean(recent[:, 0]) + 1) / 2, 0, 1))  # avg pleasure
+            sig[25] = float(np.clip((np.mean(recent[:, 1]) + 1) / 2, 0, 1))  # avg arousal
+        else:
+            sig[24] = 0.5
+            sig[25] = 0.5
+
+        return sig
+
+    def _build_context_input(self) -> np.ndarray:
+        """Historial PAD aplanado (30 valores) para _EmotionContextNet."""
+        n    = _EmotionContextNet.N_HIST
+        hist = list(self._affect_memory[-n:])
+        # Pad con estado base si hay menos de N turnos
+        while len(hist) < n:
+            hist.insert(0, self._BASE_PAD.copy())
+        flat = np.concatenate(hist).astype(np.float32)  # shape (30,)
+        return flat
+
+    def _affect_context(self) -> np.ndarray:
+        if not self._affect_memory:
+            return self._BASE_PAD.copy()
+        return np.mean(self._affect_memory[-self._AFFECT_MEM_LEN:], axis=0).astype(np.float32)
+
+    # ── Actualización principal ───────────────────────────────────────────
+
+    def update(self, sentiment: dict, intent: dict, message: str,
+               session_turns: int, was_helpful_last: bool = True) -> dict:
+        """
+        Actualiza el estado PAD con ensemble de 4 fuentes y retorna resultado.
+        Llamar UNA vez por query, antes de generar respuesta.
+        """
+        self.session_turns    = session_turns
+        self.total_turns     += 1
+        self._last_was_helpful = was_helpful_last
+
+        # ── 1. Vector de 26 señales ──────────────────────────────────
+        sig = self._build_signal_vector(sentiment, intent, message, was_helpful_last)
+
+        # ── 2. _AffectNet → delta principal ─────────────────────────
+        net_delta = self.net.forward(sig)
+
+        # ── 3. _EmotionContextNet → delta de inercia histórica ───────
+        ctx_input  = self._build_context_input()
+        ctx_delta  = self.context_net.forward(ctx_input)
+
+        # ── 4. _EmotionRegulationNet → delta regulador ───────────────
+        reg_delta  = self.reg_net.forward(self.pad, sig)
+
+        # ── 5. Pesos manuales (fallback heurístico) ───────────────────
+        manual_delta = np.zeros(3, dtype=np.float32)
+        signal_names = [
+            "sentiment_positive", "sentiment_negative", "sentiment_urgent", "sentiment_confused",
+            "is_greeting", "is_farewell", "is_thanks", "is_technical",
+            "humor_signal", "aggression_signal", "love_signal", "frustration_signal",
+            "boredom_signal", "sentiment_urgent",
+            "helpful_feedback", "unhelpful_feedback", "creator_present", "long_session"
+        ]
+        for i, sname in enumerate(signal_names[:18]):
+            if i < len(sig) and sig[i] > 0.3:
+                w = _SIGNAL_WEIGHTS.get(sname, np.zeros(3))
+                manual_delta += w * float(sig[i])
+
+        # ── 6. Ensemble 4 fuentes: 40/25/20/15 ───────────────────────
+        delta = (
+            0.40 * net_delta +
+            0.25 * ctx_delta +
+            0.20 * reg_delta +
+            0.15 * manual_delta
+        ).astype(np.float32)
+
+        delta = np.clip(delta, -self._MAX_STEP, self._MAX_STEP)
+
+        # ── 7. Decaimiento hacia base ─────────────────────────────────
+        toward_base = (self._BASE_PAD - self.pad) * self._DECAY
+        self.pad    = self._clamp(self.pad + delta + toward_base)
+
+        # ── 8. Modulación circadiana ──────────────────────────────────
+        self.pad = self._clamp(self.pad + self._circadian_delta())
+
+        # ── 9. Influencia de memoria afectiva ─────────────────────────
+        if len(self._affect_memory) >= 3:
+            ctx   = self._affect_context()
+            blend = (ctx - self.pad) * 0.08
+            self.pad = self._clamp(self.pad + blend)
+
+        # ── 10. Guardar en memoria afectiva ───────────────────────────
+        self._affect_memory.append(self.pad.copy())
+        if len(self._affect_memory) > self._AFFECT_MEM_LEN:
+            self._affect_memory.pop(0)
+
+        # ── 11. Determinar modo ───────────────────────────────────────
+        new_mode = self._pad_to_mode()
+        if new_mode != self.current_mode:
+            print(
+                f"💫 [PersonalityV3] {self.current_mode}→{new_mode} | {self._fmt_pad()}",
+                file=sys.stderr, flush=True
+            )
+            self.current_mode   = new_mode
+            self.mode_turns     = 0
+            self.transition_count += 1
+        else:
+            self.mode_turns += 1
+
+        # ── 12. Entrenamiento online de las 3 redes ───────────────────
+        if len(self._train_buffer) > 0:
+            last_sig, last_target = self._train_buffer[-1]
+            # _AffectNet
+            loss_affect = self.net.backward(last_target)
+            # _EmotionContextNet: target = el delta PAD que realmente ocurrió
+            ctx_target = np.clip(delta * 0.5, -0.5, 0.5).astype(np.float32)
+            loss_ctx = self.context_net.backward(ctx_target)
+            # _EmotionRegulationNet: target = inverso del exceso si hay extremo
+            intensity = float(np.linalg.norm(self.pad)) / np.sqrt(3)
+            if intensity > 0.75:
+                reg_target = np.clip(-self.pad * 0.2, -0.3, 0.3).astype(np.float32)
+            else:
+                reg_target = np.zeros(3, dtype=np.float32)
+            loss_reg = self.reg_net.backward(reg_target)
+
+            if self.total_turns % 50 == 0:
+                print(f"[PersonalityV3] Loss — Affect:{loss_affect:.4f} Ctx:{loss_ctx:.4f} Reg:{loss_reg:.4f}",
+                      file=sys.stderr, flush=True)
+
+        # Guardar par para próxima iteración
+        manual_target = np.clip(manual_delta, -1.0, 1.0).astype(np.float32)
+        self._train_buffer.append((sig, manual_target))
+        if len(self._train_buffer) > self._TRAIN_BUF_LEN:
+            self._train_buffer.pop(0)
+
+        return {
+            "pad":           self.pad.tolist(),
+            "mode":          self.current_mode,
+            "mode_turns":    self.mode_turns,
+            "transitions":   self.transition_count,
+            "pleasure":      float(self.pad[0]),
+            "arousal":       float(self.pad[1]),
+            "dominance":     float(self.pad[2]),
+            "session_turns": self.session_turns,
+            "affect_expansions": self.net._expansions,
+        }
+
+    # ── Derivados del estado PAD ──────────────────────────────────────────
+
+    def get_llm_temperature(self, is_creator: bool = False) -> float:
+        """
+        Temperatura LLM derivada algebraicamente del espacio PAD.
+        Mayor arousal + mayor pleasure = más creatividad (temp alta).
+        Mayor dominance + menor arousal = más precisión (temp baja).
+        """
+        p, a, d = float(self.pad[0]), float(self.pad[1]), float(self.pad[2])
+        # Fórmula: base 0.65, modulada por arousal y pleasure, reducida por dominance
+        t = 0.65 + 0.22 * a + 0.10 * p - 0.10 * d
+        if is_creator:
+            t = min(t, 0.72)   # con el creador: un poco más precisa siempre
+        return float(np.clip(t, 0.40, 0.98))
+
+    def get_llm_personality_block(self, is_creator: bool = False) -> str:
+        """
+        Genera el bloque de instrucciones de personalidad para el system prompt.
+        Contiene: estado PAD real, nombre del modo, instrucción lingüística detallada,
+        y parámetros derivados (temperatura conceptual, profundidad, formalidad).
+        """
+        mode = self.current_mode
+        p, a, d = float(self.pad[0]), float(self.pad[1]), float(self.pad[2])
+
+        mode_data    = _AFFECT_MODES.get(mode, _AFFECT_MODES["neutral"])
+        _, _, _, _, depth_hint, formality_hint = mode_data
+
+        mode_prompt  = _MODE_PROMPTS.get(mode, _MODE_PROMPTS["neutral"])
+
+        # Intensidad del estado (distancia al centro)
+        intensity = float(np.linalg.norm(self.pad)) / np.sqrt(3)
+
+        # Tendencia: ¿está subiendo o bajando en arousal?
+        if len(self._affect_memory) >= 3:
+            recent_a = [v[1] for v in self._affect_memory[-3:]]
+            trend = "subiendo" if recent_a[-1] > recent_a[0] + 0.05 else                     "bajando"  if recent_a[-1] < recent_a[0] - 0.05 else "estable"
+        else:
+            trend = "estable"
+
+        stability_desc = (
+            f"Llevas {self.mode_turns} turnos en este estado — ya está consolidado."
+            if self.mode_turns > 8 else
+            f"Acabas de transicionar a este estado (turno {self.mode_turns}) — todavía se está asentando."
+        )
+
+        block = (
+            f"\n\n{'━'*52}\n"
+            f"ESTADO AFECTIVO INTERNO — NEXUS (TIEMPO REAL)\n"
+            f"{'━'*52}\n"
+            f"Modo actual  : {mode.upper()}\n"
+            f"PAD real     : Pleasure={p:+.2f}  Arousal={a:+.2f}  Dominance={d:+.2f}\n"
+            f"Intensidad   : {intensity:.0%}  |  Energía: {trend}\n"
+            f"{stability_desc}\n"
+            f"Transiciones en sesión: {self.transition_count}\n\n"
+            f"INSTRUCCIÓN DE PERSONALIDAD:\n"
+            f"{mode_prompt}\n\n"
+            f"PARÁMETROS DERIVADOS:\n"
+            f"• Profundidad de respuesta: {'alta — desarrolla con detalle' if depth_hint > 0.7 else 'media' if depth_hint > 0.4 else 'baja — sé concisa'}\n"
+            f"• Registro: {'formal' if formality_hint > 0.7 else 'conversacional' if formality_hint < 0.35 else 'neutro'}\n"
+        )
+
+        if is_creator:
+            block += (
+                f"\nCon tu creador: mantén lealtad y honestidad técnica como prioridad absoluta.\n"
+                f"Refleja este estado — él merece la versión más auténtica de ti.\n"
+            )
+
+        block += f"{'━'*52}\n"
+        return block
+
+    def get_smart_mode_style(self) -> dict:
+        """Parámetros para Smart Mode (sin LLM)."""
+        mode_data = _AFFECT_MODES.get(self.current_mode, _AFFECT_MODES["neutral"])
+        p, a, d, temp, depth, formality = mode_data[0], mode_data[1], mode_data[2], mode_data[3], mode_data[4], mode_data[5]
+        return {
+            "mode":       self.current_mode,
+            "pleasure":   float(self.pad[0]),
+            "arousal":    float(self.pad[1]),
+            "dominance":  float(self.pad[2]),
+            "warmth":     float(np.clip((self.pad[0] + 1) / 2, 0, 1)),
+            "energy":     float(np.clip((self.pad[1] + 1) / 2, 0, 1)),
+            "playfulness": float(np.clip((self.pad[0] * 0.6 + self.pad[1] * 0.4 + 1) / 2, 0, 1)),
+        }
+
+    def auto_report(self) -> str:
+        """NEXUS describe su estado interno si alguien le pregunta."""
+        p, a, d = float(self.pad[0]), float(self.pad[1]), float(self.pad[2])
+        mode     = self.current_mode
+        stab     = self.mode_turns
+        trans    = self.transition_count
+
+        intensity = np.linalg.norm(self.pad) / np.sqrt(3)
+
+        # Traducción de PAD a lenguaje natural
+        pleasure_desc = (
+            "me siento bien, hay algo que fluye" if p >  0.5 else
+            "estoy en un punto neutro"           if p >  0.0 else
+            "hay algo que no termina de encajar" if p > -0.4 else
+            "francamente no estoy en mi mejor momento"
+        )
+        arousal_desc = (
+            "con mucha energía, activa"   if a > 0.6 else
+            "a un ritmo normal"           if a > 0.1 else
+            "tranquila, pausada"          if a > -0.3 else
+            "bastante calmada, casi lenta"
+        )
+        dominance_desc = (
+            "con bastante seguridad en lo que hago" if d > 0.5 else
+            "con control razonable"                 if d > 0.0 else
+            "un poco a la deriva"
+        )
+
+        base = (
+            f"Ahora mismo {pleasure_desc}, {arousal_desc}, {dominance_desc}. "
+            f"Mi estado PAD actual es P={p:+.2f} / A={a:+.2f} / D={d:+.2f} — "
+            f"lo que me pone más cerca del modo **{mode}**."
+        )
+
+        if stab > 15:
+            base += f" He estado aquí {stab} turnos, parece que algo en esta conversación me ancló."
+        elif stab < 3:
+            base += f" Acabo de cambiar a este estado — todavía se está sedimentando."
+
+        if trans > 5:
+            base += f" Esta conversación me ha movido bastante ({trans} transiciones). No es lineal."
+        elif trans == 0:
+            base += " No he transicionado todavía, estoy consistente."
+
+        if intensity > 0.6:
+            base += " La intensidad es alta — este estado no es débil."
+        elif intensity < 0.2:
+            base += " Estoy en un estado bastante suave, cerca del centro."
+
+        return base
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  NEXUS BRAIN v10.0 APEX
 # ═══════════════════════════════════════════════════════════════════════
@@ -823,11 +1774,20 @@ class NexusBrain:
         self._lr_history:  dict = {}
         self._lr_cooldown: dict = {}
 
-        # 8 redes DynamicNeuralNet
-        print("🔥 Inicializando 8 redes...", file=sys.stderr, flush=True)
+        # ── PersonalityEngine v3.0 — se inicializa ANTES que las redes
+        # porque las 8 redes cognitivas reciben el PAD como entrada extra
+        self.personality       = PersonalityEngine(DATA_DIR)
+        self._last_sentiment   = {'label': 'neutral', 'confidence': 0.5}
+        self._last_was_helpful = True
+
+        # ── PAD_DIM: las 8 redes reciben 3 valores PAD adicionales ───
+        PAD_DIM = 3
+
+        # 8 redes DynamicNeuralNet — ahora con PAD_DIM extra en la entrada
+        print("🔥 Inicializando 8 redes cognitivas con espacio PAD-3D...", file=sys.stderr, flush=True)
 
         self.rank_net = DynamicNeuralNet([
-            {'in': 256+32, 'out': 1024, 'act': 'relu'},
+            {'in': 256+32+PAD_DIM, 'out': 1024, 'act': 'relu'},
             {'in': 1024,   'out': 512,  'act': 'relu'},
             {'in': 512,    'out': 256,  'act': 'relu'},
             {'in': 256,    'out': 128,  'act': 'relu'},
@@ -837,7 +1797,7 @@ class NexusBrain:
         ], lr=0.0001)
 
         self.intent_net = DynamicNeuralNet([
-            {'in': 128, 'out': 512, 'act': 'relu'},
+            {'in': 128+PAD_DIM, 'out': 512, 'act': 'relu'},
             {'in': 512, 'out': 256, 'act': 'relu'},
             {'in': 256, 'out': 128, 'act': 'relu'},
             {'in': 128, 'out': 64,  'act': 'relu'},
@@ -845,9 +1805,8 @@ class NexusBrain:
             {'in': 32,  'out': 16,  'act': 'sigmoid'},
         ], lr=0.0002)
 
-        # FIXED: context_net — entrada 2*EMBED_DIM (dinámica, no hardcodeada)
         self.context_net = DynamicNeuralNet([
-            {'in': 2*EMBED_DIM, 'out': 512, 'act': 'relu'},
+            {'in': 2*EMBED_DIM+PAD_DIM, 'out': 512, 'act': 'relu'},
             {'in': 512,         'out': 256, 'act': 'relu'},
             {'in': 256,         'out': 128, 'act': 'relu'},
             {'in': 128,         'out': 64,  'act': 'relu'},
@@ -855,7 +1814,7 @@ class NexusBrain:
         ], lr=0.00015)
 
         self.sentiment_net = DynamicNeuralNet([
-            {'in': 128, 'out': 512, 'act': 'relu'},
+            {'in': 128+PAD_DIM, 'out': 512, 'act': 'relu'},
             {'in': 512, 'out': 256, 'act': 'relu'},
             {'in': 256, 'out': 128, 'act': 'relu'},
             {'in': 128, 'out': 64,  'act': 'relu'},
@@ -864,7 +1823,7 @@ class NexusBrain:
         ], lr=0.00025)
 
         self.meta_net = DynamicNeuralNet([
-            {'in': 64,  'out': 256, 'act': 'relu'},
+            {'in': 64+PAD_DIM, 'out': 256, 'act': 'relu'},
             {'in': 256, 'out': 128, 'act': 'relu'},
             {'in': 128, 'out': 64,  'act': 'relu'},
             {'in': 64,  'out': 32,  'act': 'relu'},
@@ -873,7 +1832,7 @@ class NexusBrain:
         ], lr=0.0001)
 
         self.relevance_net = DynamicNeuralNet([
-            {'in': 256, 'out': 512, 'act': 'relu'},
+            {'in': 256+PAD_DIM, 'out': 512, 'act': 'relu'},
             {'in': 512, 'out': 256, 'act': 'relu'},
             {'in': 256, 'out': 128, 'act': 'relu'},
             {'in': 128, 'out': 64,  'act': 'relu'},
@@ -882,7 +1841,7 @@ class NexusBrain:
         ], lr=0.00015)
 
         self.dialogue_net = DynamicNeuralNet([
-            {'in': 128+64, 'out': 512, 'act': 'relu'},
+            {'in': 128+64+PAD_DIM, 'out': 512, 'act': 'relu'},
             {'in': 512,    'out': 256, 'act': 'relu'},
             {'in': 256,    'out': 128, 'act': 'relu'},
             {'in': 128,    'out': 64,  'act': 'relu'},
@@ -911,10 +1870,18 @@ class NexusBrain:
             self._load_from_mongodb()
         self.total_parameters = self._count_parameters()
 
-        print("✅ NexusBrain v10.0 APEX listo", file=sys.stderr, flush=True)
+        print("✅ NexusBrain v12.0 APEX listo — 8 redes cognitivas PAD-3D + 3 redes emocionales", file=sys.stderr, flush=True)
         self._print_stats()
 
     # ─── Utilidades ───────────────────────────────────────────────────
+
+    def _get_pad_vec(self) -> np.ndarray:
+        """Retorna el vector PAD actual normalizado a [0,1] para concatenar a entradas."""
+        try:
+            pad = self.personality.pad
+            return np.clip((pad + 1.0) / 2.0, 0.0, 1.0).astype(np.float32)
+        except Exception:
+            return np.array([0.5, 0.5, 0.5], dtype=np.float32)
 
     def _count_parameters(self) -> int:
         total = 0
@@ -922,6 +1889,16 @@ class NexusBrain:
                     self.sentiment_net, self.meta_net, self.relevance_net,
                     self.dialogue_net, self.conv_learner.response_quality_net]:
             total += net.count_params()
+        # Sumar redes emocionales
+        total += self.personality.net.count_params()
+        total += sum(p.size for p in [
+            self.personality.context_net.W1, self.personality.context_net.b1,
+            self.personality.context_net.W2, self.personality.context_net.b2,
+            self.personality.context_net.W3, self.personality.context_net.b3,
+            self.personality.reg_net.W1, self.personality.reg_net.b1,
+            self.personality.reg_net.W2, self.personality.reg_net.b2,
+            self.personality.reg_net.W3, self.personality.reg_net.b3,
+        ])
         return total
 
     def _load_models(self):
@@ -1064,15 +2041,25 @@ class NexusBrain:
             'pixeldrain', 'krakenfiles', 'enlace caído', 'enlace caido'
         ])
 
+        is_mood_query = any(p in msg_lower for p in [
+            'cómo te sientes', 'como te sientes', 'qué sientes', 'que sientes',
+            'cómo estás', 'como estas', 'qué estado tienes', 'tu estado de ánimo',
+            'tu personalidad', 'cómo eres ahora', 'qué modo', 'que modo',
+            'cómo te ves', 'qué emoción sientes', 'estás brava', 'estás feliz',
+            'tu humor', 'cómo te lleva', 'qué humor', 'cómo te encuentras',
+            'pad', 'estado afectivo', 'qué sientes ahora', 'cómo te sientes hoy',
+        ])
+
         return {
-            'needs_search': needs_search,
-            'search_query': search_query,
-            'is_question':  is_question,
-            'is_internal':  is_internal,
-            'is_greeting':  any(g in msg_lower for g in ['hola', 'hey', 'buenos', 'saludos', 'buenas']),
-            'is_farewell':  any(f in msg_lower for f in ['adiós', 'adios', 'bye', 'chao', 'hasta luego']),
-            'is_thanks':    any(t in msg_lower for t in ['gracias', 'agradezco', 'perfecto', 'excelente']),
-            'confidence':   0.85 if needs_search else 0.6
+            'needs_search':  needs_search,
+            'search_query':  search_query,
+            'is_question':   is_question,
+            'is_internal':   is_internal,
+            'is_mood_query': is_mood_query,
+            'is_greeting':   any(g in msg_lower for g in ['hola', 'hey', 'buenos', 'saludos', 'buenas']),
+            'is_farewell':   any(f in msg_lower for f in ['adiós', 'adios', 'bye', 'chao', 'hasta luego']),
+            'is_thanks':     any(t in msg_lower for t in ['gracias', 'agradezco', 'perfecto', 'excelente']),
+            'confidence':    0.85 if needs_search else 0.6
         }
 
     def search_web(self, query: str, max_results: int = 8) -> list:
@@ -1139,6 +2126,7 @@ class NexusBrain:
             return []
         results = results[:10]
         emb_q   = self.emb.embed(query)
+        pad_vec = self._get_pad_vec()
         ranked  = []
         for result in results:
             text  = result.get('title', '') + ' ' + result.get('description', '')
@@ -1148,7 +2136,8 @@ class NexusBrain:
                 1.0 if 'wikipedia' in result.get('url', '') else 0.0,
                 result.get('_position', 1) / 10.0
             ])
-            inp               = np.concatenate([emb_q, emb_r, feats]).reshape(1, -1)
+            # PAD concatenado: las redes ahora "sienten" el estado emocional al rankear
+            inp               = np.concatenate([emb_q, emb_r, feats, pad_vec]).reshape(1, -1)
             score             = float(self.rank_net.predict(inp).flatten()[0])
             result['neuralScore'] = int(score * 100)
             result['rawScore']    = score
@@ -1183,6 +2172,20 @@ class NexusBrain:
             # Intención y sentimiento
             intent    = self.detect_intent(message, self.working.turn_count())
             sentiment = self._detect_sentiment(msg_emb)
+
+            # ── Actualizar estado afectivo ─────────────────────────
+            self._last_sentiment = sentiment
+            try:
+                personality_result = self.personality.update(
+                    sentiment        = sentiment,
+                    intent           = intent,
+                    message          = message,
+                    session_turns    = self.working.turn_count(),
+                    was_helpful_last = self._last_was_helpful,
+                )
+            except Exception as _pe:
+                print(f"[PersonalityV2] Error en update: {_pe}", file=sys.stderr, flush=True)
+                personality_result = {"mode": "neutral", "pad": [0.1, 0.2, 0.45]}
 
             # FIXED: dialogue_decision calculada y USADA
             dialogue_decision = self._dialogue_decision(msg_emb, intent)
@@ -1237,7 +2240,8 @@ class NexusBrain:
             stats          = self._activity_report()
             draft_response = self.response_gen.generate(
                 message, ranked_results, intent, similar_eps, stats, reasoning,
-                conversation_history or [], uctx, dialogue_decision
+                conversation_history or [], uctx, dialogue_decision,
+                personality=personality_result
             )
 
             try:
@@ -1261,6 +2265,7 @@ class NexusBrain:
 
             # FIXED: targets de entrenamiento dinámicos
             try:
+                pad_vec       = self._get_pad_vec()
                 response_len  = len(final_response.split())
                 base_quality  = 0.7
                 if response_len > 50:   base_quality += 0.10
@@ -1269,17 +2274,18 @@ class NexusBrain:
                 if facts_extracted > 0: base_quality += 0.05
                 dynamic_quality = min(base_quality, 0.95)
 
-                rel_inp    = np.concatenate([msg_emb, resp_emb]).reshape(1, -1)
+                # relevance_net con PAD
+                rel_inp    = np.concatenate([msg_emb, resp_emb, pad_vec]).reshape(1, -1)
                 rel_target = np.array([[dynamic_quality]], dtype=np.float32)
 
                 for _pass in range(3):
-                    q_loss = self.conv_learner.train_quality_net(msg_emb, resp_emb, dynamic_quality)
+                    q_loss = self.conv_learner.train_quality_net(msg_emb, resp_emb, dynamic_quality, pad_vec)
                     self._lr_step('quality', self.conv_learner.response_quality_net, q_loss)
                     r_loss = self.relevance_net.train_step(rel_inp, rel_target)
                     self._lr_step('relevance', self.relevance_net, r_loss)
 
                 self._train_dialogue_net(msg_emb, intent)
-                self._train_context_net(msg_emb, resp_emb)  # FIXED: ahora se entrena
+                self._train_context_net(msg_emb, resp_emb)
                 self.conv_learner.learn_from_interaction(message, final_response, dynamic_quality)
 
                 self.emb.fit_text(message)
@@ -1296,7 +2302,9 @@ class NexusBrain:
                     meta_feats[2] = float(len(ranked_results)) / 10.0
                     meta_feats[3] = 1.0 if intent.get('needs_search') else 0.0
                     meta_feats[4] = float(self.param_system.get_utilization())
-                    m_loss = self.meta_net.train_step(meta_feats.reshape(1, -1),
+                    # meta_net con PAD
+                    meta_inp = np.concatenate([meta_feats, pad_vec]).reshape(1, -1)
+                    m_loss = self.meta_net.train_step(meta_inp,
                                                       np.array([[0.8]], dtype=np.float32))
                     self._lr_step('meta', self.meta_net, m_loss)
                 except Exception as e:
@@ -1304,6 +2312,12 @@ class NexusBrain:
 
                 self.total_parameters = self._count_parameters()
                 self.total_trainings  += 3
+
+                # ── Retroalimentación a PersonalityEngine ─────────────
+                try:
+                    self._last_was_helpful = (dynamic_quality >= 0.75)
+                except Exception:
+                    pass
 
             except Exception as e:
                 print(f"[Training] Error: {e}", file=sys.stderr, flush=True)
@@ -1321,7 +2335,7 @@ class NexusBrain:
                 print("[Brain] Caché de relevancia limpiada", file=sys.stderr, flush=True)
 
             processing_time = time.time() - start_time
-            _q_str = f"{dynamic_quality:.2f}" if 'dynamic_quality' in locals() else "N/A"
+            _q_str = f"{dynamic_quality:.2f}" if 'dynamic_quality' in dir() else "N/A"
             print(f"[Brain] ✓ {processing_time:.2f}s | LLM: {self.llm_available} | quality: {_q_str}",
                   file=sys.stderr, flush=True)
 
@@ -1330,6 +2344,7 @@ class NexusBrain:
                 'message':           final_response,
                 'intent':            intent,
                 'sentiment':         sentiment,
+                'personality':       personality_result,
                 'reasoning':         reasoning,
                 'needs_search':      intent['needs_search'],
                 'search_query':      intent.get('search_query', ''),
@@ -1361,8 +2376,9 @@ class NexusBrain:
     # ─── Entrenamiento ────────────────────────────────────────────────
 
     def _dialogue_decision(self, msg_emb: np.ndarray, intent: dict) -> dict:
-        """FIXED: resultado ahora se usa en generate()"""
+        """FIXED: resultado ahora se usa en generate() + PAD inyectado"""
         try:
+            pad_vec  = self._get_pad_vec()
             feats    = np.zeros(64, dtype=np.float32)
             feats[0] = 1.0 if intent.get('needs_search') else 0.0
             feats[1] = 1.0 if intent.get('is_greeting')  else 0.0
@@ -1375,7 +2391,7 @@ class NexusBrain:
             feats[8] = float(self.total_queries) / 10000.0
             feats[9] = float(self.llm_available)
 
-            inp    = np.concatenate([msg_emb[:128], feats]).reshape(1, -1)
+            inp    = np.concatenate([msg_emb[:128], feats, pad_vec]).reshape(1, -1)
             out    = self.dialogue_net.predict(inp).flatten()
             labels = ['search', 'direct', 'ask', 'elaborate']
             return {'strategy': labels[int(np.argmax(out))],
@@ -1424,6 +2440,7 @@ class NexusBrain:
 
     def _train_dialogue_net(self, msg_emb: np.ndarray, intent: dict):
         try:
+            pad_vec  = self._get_pad_vec()
             feats    = np.zeros(64, dtype=np.float32)
             feats[0] = 1.0 if intent.get('needs_search') else 0.0
             feats[1] = 1.0 if intent.get('is_greeting')  else 0.0
@@ -1432,7 +2449,7 @@ class NexusBrain:
             feats[4] = float(intent.get('confidence', 0.5))
             feats[5] = float(self.working.turn_count()) / 128.0
 
-            inp    = np.concatenate([msg_emb[:128], feats]).reshape(1, -1)
+            inp    = np.concatenate([msg_emb[:128], feats, pad_vec]).reshape(1, -1)
             target = np.zeros((1, 4), dtype=np.float32)
 
             if intent.get('needs_search'):      target[0, 0] = 1.0
@@ -1445,22 +2462,18 @@ class NexusBrain:
             print(f"[TrainDialogue] Error: {e}", file=sys.stderr, flush=True)
 
     def _train_context_net(self, msg_emb: np.ndarray, resp_emb: np.ndarray):
-        """FIXED: usa EMBED_DIM dinámico — sin hardcodear 256"""
+        """Entrena context_net con PAD inyectado"""
         try:
+            pad_vec  = self._get_pad_vec()
             ctx_embs = self.working.context_embeddings()
             if len(ctx_embs) >= 2:
-                # ctx_summary del mismo tamaño que EMBED_DIM
                 ctx_summary = np.mean(ctx_embs[-4:], axis=0)[:EMBED_DIM].astype(np.float32)
                 if ctx_summary.shape[0] < EMBED_DIM:
                     ctx_summary = np.pad(ctx_summary, (0, EMBED_DIM - ctx_summary.shape[0]))
             else:
                 ctx_summary = np.zeros(EMBED_DIM, dtype=np.float32)
 
-            # inp tiene tamaño EMBED_DIM + EMBED_DIM = 2*EMBED_DIM
-            msg_emb_trunc = np.asarray(msg_emb).flatten()[:EMBED_DIM].astype(np.float32)
-            if msg_emb_trunc.shape[0] < EMBED_DIM:
-                msg_emb_trunc = np.pad(msg_emb_trunc, (0, EMBED_DIM - msg_emb_trunc.shape[0]))
-            inp    = np.concatenate([msg_emb_trunc, ctx_summary]).reshape(1, -1).astype(np.float32)
+            inp    = np.concatenate([msg_emb, ctx_summary, pad_vec]).reshape(1, -1).astype(np.float32)
             target = np.array([[0.85]], dtype=np.float32)
             c_loss = self.context_net.train_step(inp, target)
             self._lr_step('context', self.context_net, c_loss)
@@ -1469,7 +2482,8 @@ class NexusBrain:
 
     def _detect_sentiment(self, msg_emb: np.ndarray) -> dict:
         try:
-            inp        = msg_emb.reshape(1, -1)
+            pad_vec    = self._get_pad_vec()
+            inp        = np.concatenate([msg_emb.flatten()[:128], pad_vec]).reshape(1, -1)
             scores     = self.sentiment_net.predict(inp).flatten()
             labels     = ['positive', 'neutral', 'negative', 'urgent', 'confused']
             sentiment  = labels[int(np.argmax(scores))]
@@ -1501,21 +2515,50 @@ class NexusBrain:
             total += params
             widths = [net.layers[0].W.shape[0]] + [l.W.shape[1] for l in net.layers]
             arch   = '→'.join(str(w) for w in widths)
-            lines.append(f"  • {name}: {len(net.layers)} capas [{arch}] — {params:,} params")
+            lines.append(f"  • {name}: {len(net.layers)} capas [{arch}] — {params:,} params [+PAD-3D]")
+
+        # Redes emocionales
+        affect_params = self.personality.net.count_params()
+        ctx_params    = sum(p.size for p in [
+            self.personality.context_net.W1, self.personality.context_net.b1,
+            self.personality.context_net.W2, self.personality.context_net.b2,
+            self.personality.context_net.W3, self.personality.context_net.b3])
+        reg_params    = sum(p.size for p in [
+            self.personality.reg_net.W1, self.personality.reg_net.b1,
+            self.personality.reg_net.W2, self.personality.reg_net.b2,
+            self.personality.reg_net.W3, self.personality.reg_net.b3])
+        total += affect_params + ctx_params + reg_params
+
+        affect_arch = '→'.join(str(w.shape[1]) for w in self.personality.net.layers_w)
+        affect_arch = f"{self.personality.net.n_inputs}→{affect_arch}"
+
+        lines += [
+            f"\n  ── Redes Emocionales (PersonalityEngine v3.0) ──",
+            f"  • _AffectNet     : [{affect_arch}] — {affect_params:,} params | expansiones: {self.personality.net._expansions} | Adam",
+            f"  • EmotionContextNet : [30→64→32→3] — {ctx_params:,} params | aprende inercias PAD",
+            f"  • EmotionRegulationNet: [29→32→16→3] — {reg_params:,} params | modera extremos",
+        ]
 
         ep_stats  = self.episodic.stats()
         sem_stats = self.semantic.stats()
 
         return (
             f"ARQUITECTURA REAL EN TIEMPO DE EJECUCIÓN:\n"
-            f"  Versión: NEXUS v10.0 APEX\n"
-            f"  Redes neuronales activas: {len(nets)}\n"
+            f"  Versión: NEXUS v12.0 APEX\n"
+            f"  Redes cognitivas: 8 (todas reciben PAD-3D como contexto emocional)\n"
+            f"  Redes emocionales: 3 (_AffectNet auto-expansible + ContextNet + RegulationNet)\n"
+            f"  Total redes activas: 11\n"
             + '\n'.join(lines)
             + f"\n  Parámetros totales: {total:,}\n\n"
+            f"ESTADO EMOCIONAL ACTUAL:\n"
+            f"  PAD: P={self.personality.pad[0]:+.2f} A={self.personality.pad[1]:+.2f} D={self.personality.pad[2]:+.2f}\n"
+            f"  Modo: {self.personality.current_mode} ({self.personality.mode_turns} turnos)\n"
+            f"  Transiciones: {self.personality.transition_count}\n\n"
             f"MEMORIA:\n"
             f"  WorkingMemory: {self.working.turn_count()}/{self.working.max_turns} turnos\n"
             f"  EpisodicMemory: {ep_stats.get('total', 0):,} episodios (cap: 500,000)\n"
             f"  SemanticMemory: {sem_stats.get('facts', 0):,} hechos aprendidos\n"
+            f"  Memoria afectiva: {len(self.personality._affect_memory)}/{self.personality._AFFECT_MEM_LEN} turnos PAD\n"
             f"  Vocabulario: {self.emb.vocab_size():,} n-gramas\n\n"
             f"ACTIVIDAD:\n"
             f"  Consultas: {self.total_queries:,} | Entrenamientos: {self.total_trainings:,}\n"
@@ -1523,7 +2566,7 @@ class NexusBrain:
         )
 
     def _activity_report(self) -> dict:
-        """FIXED: método con su def correcto — ya no está huérfano"""
+        """v12.0 — incluye métricas de las 3 redes emocionales"""
         ep_stats  = self.episodic.stats()
         sem_stats = self.semantic.stats()
         return {
@@ -1535,6 +2578,11 @@ class NexusBrain:
             'meta_loss':             self.meta_net.avg_recent_loss(100),
             'relevance_loss':        self.relevance_net.avg_recent_loss(100),
             'dialogue_loss':         self.dialogue_net.avg_recent_loss(100),
+            # Nuevas redes emocionales
+            'affect_net_loss':       float(np.mean(self.personality.net._loss_history[-50:])) if self.personality.net._loss_history else 0.0,
+            'emotion_ctx_loss':      self.personality.context_net.avg_loss(50),
+            'emotion_reg_loss':      self.personality.reg_net.avg_loss(50),
+            'affect_expansions':     self.personality.net._expansions,
             'vocab_size':            self.emb.vocab_size(),
             'episodes':              ep_stats.get('total', 0),
             'semantic_facts':        sem_stats.get('facts', 0),
@@ -1547,12 +2595,22 @@ class NexusBrain:
             'current_topic':         self.working.current_topic(),
             'total_parameters':      self.total_parameters,
             'cache_hits':            self._cache_hits,
-            'networks_active':       8,
-            'version':               'v10.0_APEX',
+            'networks_active':       11,   # 8 cognitivas + 3 emocionales
+            'version':               'v12.0_APEX',
+            'personality_mode':      getattr(self.personality, 'current_mode',      'neutral'),
+            'personality_pad':       getattr(self.personality, 'pad',               [0,0,0]).tolist()
+                                     if hasattr(getattr(self.personality,'pad',None),'tolist')
+                                     else [0,0,0],
+            'personality_transitions': getattr(self.personality, 'transition_count', 0),
+            'personality_mode_turns':  getattr(self.personality, 'mode_turns',       0),
         }
 
     def save_all(self):
         """Guarda todo — local y MongoDB"""
+        try:
+            self.personality.save()
+        except Exception as _pe:
+            print(f"[PersonalityV2] Error save: {_pe}", file=sys.stderr, flush=True)
         self.rank_net.save(f'{MODEL_DIR}/rank_net.pkl')
         self.intent_net.save(f'{MODEL_DIR}/intent_net.pkl')
         self.context_net.save(f'{MODEL_DIR}/context_net.pkl')
