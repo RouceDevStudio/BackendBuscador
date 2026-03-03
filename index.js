@@ -970,7 +970,7 @@ app.post('/api/upload', requireAuth, (req, res) => {
 // ── POST /api/chat-with-file — chat enviando archivos ──────────────
 app.post('/api/chat-with-file', requireAuth, async (req, res) => {
     if (!checkRateLimit(req, res, 60, 60000)) return;
-    const { message, conversationId, history, fileData } = req.body;
+    const { message, conversationId, history, fileData, fileData2 } = req.body;
 
     const userId = req.user.id;
     const { ObjectId } = require('mongodb');
@@ -993,16 +993,18 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
     const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
     const activeBrain = useVipBrain ? brainVip : brainBase;
 
-    // Construir el mensaje enriquecido con el archivo
+    // Construir el mensaje enriquecido con el/los archivos
+    const isComparison = !!(fileData && fileData2);
     let enrichedMessage = message || '';
-    if (fileData) {
+    if (isComparison) {
+        const defaultQ = fileData.type === 'image'
+            ? `Compara estas dos imágenes: ${fileData.name} vs ${fileData2.name}. ¿Cuál es mejor y por qué?`
+            : `Compara estos dos archivos en todos los aspectos: ${fileData.name} vs ${fileData2.name}. ¿Cuál es mejor y por qué?`;
+        enrichedMessage = message || defaultQ;
+    } else if (fileData) {
         if (fileData.type === 'image') {
-            // Para imágenes NO ponemos textSummary — el brain usa visión directamente
             enrichedMessage = message || 'Analiza esta imagen y describe todo lo que ves.';
         } else {
-            // NO incluir textSummary aquí — el archivo completo ya viaja en uctx.fileContent.
-            // Si se incluye en el mensaje también, el contenido llega duplicado (hasta 200KB × 2)
-            // lo que supera el límite de contexto de Groq y hace que el LLM retorne null.
             enrichedMessage = message || 'Analiza este archivo y responde.';
         }
     }
@@ -1011,6 +1013,14 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
         userId, email: userEmail,
         username: user?.username || req.user.username || '',
         displayName: user?.displayName || user?.username || '',
+        // Archivo 2 para comparación
+        fileData2: fileData2 ? {
+            type:     fileData2.type,
+            name:     fileData2.name,
+            content:  fileData2.type !== 'image' ? (fileData2.text || '') : '',
+            base64:   fileData2.type === 'image'  ? (fileData2.base64 || null) : null,
+            mimeType: fileData2.mimeType || null,
+        } : null,
         plan: planStatus.plan, isVip, isCreator,
         hasFile: !!fileData,
         fileType: fileData?.type || null,
