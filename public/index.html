@@ -171,14 +171,27 @@
         </div>
       </div>
     </div>
+
+    <!-- File preview bar -->
+    <div class="file-preview-bar" id="file-preview-bar" style="display:none">
+      <div class="file-preview-inner" id="file-preview-inner"></div>
+      <button class="file-preview-clear" onclick="clearAttachment()" title="Quitar archivo">✕</button>
+    </div>
+
     <div class="input-zone">
+      <!-- Hidden file input -->
+      <input type="file" id="file-input" style="display:none" onchange="handleFileSelect(event)"
+        accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.txt,.md,.js,.ts,.jsx,.tsx,.py,.cpp,.c,.h,.cs,.java,.go,.rs,.php,.rb,.sh,.sql,.yaml,.yml,.json,.html,.css,.xml,.csv,.zip">
       <div class="input-row">
+        <button class="attach-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Adjuntar archivo (imágenes, PDF, código, docs...)">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
+        </button>
         <textarea id="input" placeholder="Escribe tu mensaje…" rows="1" onkeydown="handleKey(event)"></textarea>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">
           <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
         </button>
       </div>
-      <div class="hint" id="hint">NEXUS está listo · Enter para enviar</div>
+      <div class="hint" id="hint">NEXUS listo · 📎 adjunta imágenes, PDF, código y más · Enter para enviar</div>
     </div>
   </div>
 
@@ -345,11 +358,114 @@
     </div>
   </div>
 
+  <!-- CODEGEN PANEL -->
+  <div class="tab-panel" id="panel-codegen">
+    <div class="codegen-panel">
+      <div class="codegen-header">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--neon)"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+        <h3>CodeGen — Generador de Archivos</h3>
+      </div>
+      <div class="codegen-body">
+
+        <div class="codegen-field">
+          <label>Operación</label>
+          <div class="codegen-op-row" id="cg-op-row">
+            <button class="codegen-op-btn active" onclick="setCgOp('create',this)">✨ Crear</button>
+            <button class="codegen-op-btn" onclick="setCgOp('edit',this)">✏️ Editar</button>
+            <button class="codegen-op-btn" onclick="setCgOp('fix',this)">🔧 Corregir</button>
+            <button class="codegen-op-btn" onclick="setCgOp('analyze',this)">🔍 Analizar</button>
+            <button class="codegen-op-btn" onclick="setCgOp('extend',this)">➕ Extender</button>
+          </div>
+        </div>
+
+        <div class="codegen-field">
+          <label>Tipo de archivo</label>
+          <select id="cg-type">
+            <option value="js">JavaScript (.js)</option>
+            <option value="jsx">React (.jsx)</option>
+            <option value="ts">TypeScript (.ts)</option>
+            <option value="tsx">React TypeScript (.tsx)</option>
+            <option value="py">Python (.py)</option>
+            <option value="html">HTML (.html)</option>
+            <option value="css">CSS (.css)</option>
+            <option value="json">JSON (.json)</option>
+            <option value="cpp">C++ (.cpp)</option>
+            <option value="c">C (.c)</option>
+            <option value="cs">C# (.cs)</option>
+            <option value="java">Java (.java)</option>
+            <option value="go">Go (.go)</option>
+            <option value="rs">Rust (.rs)</option>
+            <option value="php">PHP (.php)</option>
+            <option value="rb">Ruby (.rb)</option>
+            <option value="sh">Bash (.sh)</option>
+            <option value="sql">SQL (.sql)</option>
+            <option value="yaml">YAML (.yaml)</option>
+            <option value="md">Markdown (.md)</option>
+            <option value="txt">Texto (.txt)</option>
+          </select>
+        </div>
+
+        <div class="codegen-field">
+          <label>Nombre del archivo</label>
+          <input type="text" id="cg-filename" placeholder="ej: mi_proyecto.js, index.html">
+        </div>
+
+        <div class="codegen-field">
+          <label>Instrucción / Descripción</label>
+          <textarea id="cg-prompt" placeholder="Describe qué debe hacer el archivo. Puedes pedir hasta 30,000+ líneas de código, webs completas, scripts complejos, etc."></textarea>
+        </div>
+
+        <!-- Cargar archivo existente (para editar/corregir/analizar) -->
+        <div class="codegen-field" id="cg-upload-section" style="display:none">
+          <label>Archivo actual (para editar / corregir)</label>
+          <div class="codegen-upload-area" id="cg-drop-area" onclick="document.getElementById('cg-file-input').click()" ondragover="cgDragOver(event)" ondrop="cgDrop(event)" ondragleave="cgDragLeave(event)">
+            <div class="codegen-upload-icon">📂</div>
+            <div class="codegen-upload-text">Arrastra tu archivo aquí o toca para seleccionar</div>
+            <div class="codegen-upload-sub">Soporta .js, .py, .html, .css, .ts, .cpp, .c, .cs, .java, .go, .rs, .php, .txt y más</div>
+          </div>
+          <input type="file" id="cg-file-input" style="display:none" onchange="cgLoadFile(event)">
+          <div id="cg-file-loaded" style="display:none" class="codegen-file-loaded">
+            <span style="font-size:22px">📄</span>
+            <span class="codegen-file-loaded-name" id="cg-file-loaded-name">archivo.js</span>
+            <span class="codegen-file-loaded-size" id="cg-file-loaded-size"></span>
+            <button class="codegen-file-remove" onclick="cgClearFile()">✕</button>
+          </div>
+        </div>
+
+        <button class="codegen-submit-btn" id="cg-submit-btn" onclick="cgSubmit()">
+          ⚡ Generar con NEXUS
+        </button>
+
+        <div id="cg-progress" style="display:none" class="codegen-progress">
+          <div class="codegen-spinner"></div>
+          <span id="cg-progress-text">NEXUS generando archivo...</span>
+        </div>
+
+        <div id="cg-result" style="display:none" class="codegen-result">
+          <div class="codegen-result-header">
+            <span class="codegen-result-title" id="cg-result-title">resultado.js</span>
+            <span class="codegen-result-meta" id="cg-result-meta"></span>
+            <div class="codegen-result-actions">
+              <button class="codegen-action-btn" onclick="cgCopyResult()">📋 Copiar</button>
+              <button class="codegen-action-btn dl" id="cg-dl-btn" onclick="cgDownload()" style="display:none">⬇️ Descargar</button>
+            </div>
+          </div>
+          <pre class="codegen-result-code" id="cg-result-code"></pre>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
     <button class="bottom-nav-btn active" id="nav-chat" onclick="switchMainTab('chat')">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
       Chat
+    </button>
+    <button class="bottom-nav-btn" id="nav-codegen" onclick="switchMainTab('codegen')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+      CodeGen
     </button>
     <button class="bottom-nav-btn" id="nav-stats" onclick="switchMainTab('stats')">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h2v18H3V3zm4 7h2v11H7V10zm4-4h2v15h-2V6zm4 8h2v7h-2v-7zm4-6h2v13h-2V8z"/></svg>
@@ -524,6 +640,69 @@
 .hist-item-del { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:22px; height:22px; background:none; border:none; color:var(--text3); cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center; opacity:0; transition:all .15s; }
 .hist-item:hover .hist-item-del { opacity:1; }
 .hist-item-del:hover { background:rgba(244,63,94,0.15); color:var(--hot); }
+
+/* ── ATTACH BUTTON ── */
+.attach-btn { width:38px; height:38px; border-radius:10px; background:var(--surface); border:1px solid var(--border2); color:var(--text3); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .15s; }
+.attach-btn:hover { border-color:rgba(124,58,237,0.4); color:var(--neon); background:rgba(124,58,237,0.08); }
+.attach-btn.has-file { border-color:rgba(124,58,237,0.5); color:var(--neon); background:rgba(124,58,237,0.12); }
+
+/* ── FILE PREVIEW BAR ── */
+.file-preview-bar { display:flex; align-items:center; gap:10px; padding:8px 14px; background:rgba(124,58,237,0.06); border-top:1px solid rgba(124,58,237,0.15); border-bottom:1px solid rgba(124,58,237,0.15); animation:msgIn .2s ease both; }
+.file-preview-inner { flex:1; display:flex; align-items:center; gap:10px; overflow:hidden; }
+.file-preview-thumb { width:40px; height:40px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+.file-preview-icon { width:40px; height:40px; border-radius:8px; background:var(--bg2); border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.file-preview-info { overflow:hidden; }
+.file-preview-name { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.file-preview-meta { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
+.file-preview-clear { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:4px; border-radius:6px; transition:all .15s; }
+.file-preview-clear:hover { color:var(--hot); }
+
+/* ── FILE ATTACHMENT in message ── */
+.msg-file-attach { display:flex; align-items:center; gap:10px; padding-left:39px; margin-bottom:8px; }
+.msg-file-chip { display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--bg2); border:1px solid var(--border2); border-radius:10px; font-size:12px; max-width:260px; }
+.msg-file-chip-icon { font-size:18px; flex-shrink:0; }
+.msg-file-chip-name { font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.msg-file-chip-size { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
+.msg-img-preview { padding-left:39px; margin-bottom:8px; }
+.msg-img-preview img { max-width:280px; max-height:200px; border-radius:12px; border:1px solid var(--border2); object-fit:cover; }
+
+/* ── CODE GEN PANEL ── */
+#panel-codegen { padding: 0; }
+.codegen-panel { height:100%; display:flex; flex-direction:column; overflow:hidden; }
+.codegen-header { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.codegen-header h3 { font-size:14px; font-weight:700; font-family:'Syne',sans-serif; margin:0; }
+.codegen-body { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+.codegen-field label { display:block; font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; font-family:'Space Mono',monospace; }
+.codegen-field input, .codegen-field textarea, .codegen-field select { width:100%; background:var(--bg1); border:1px solid var(--border2); border-radius:10px; padding:10px 12px; font-family:inherit; font-size:13px; color:var(--text); outline:none; box-sizing:border-box; resize:none; transition:border-color .15s; }
+.codegen-field input:focus, .codegen-field textarea:focus, .codegen-field select:focus { border-color:rgba(124,58,237,0.4); }
+.codegen-field textarea { min-height:80px; }
+.codegen-op-row { display:flex; gap:6px; flex-wrap:wrap; }
+.codegen-op-btn { padding:6px 12px; border-radius:99px; border:1px solid var(--border2); background:var(--surface); font-size:11px; font-weight:700; color:var(--text2); cursor:pointer; font-family:inherit; transition:all .15s; }
+.codegen-op-btn.active { border-color:rgba(124,58,237,0.5); background:rgba(124,58,237,0.1); color:var(--neon); }
+.codegen-submit-btn { width:100%; padding:12px; background:linear-gradient(135deg,var(--accent),#4F46E5); border:none; border-radius:12px; font-family:inherit; font-size:14px; font-weight:700; color:#fff; cursor:pointer; transition:opacity .15s; }
+.codegen-submit-btn:disabled { opacity:.5; }
+.codegen-result { background:var(--bg1); border:1px solid var(--border2); border-radius:12px; overflow:hidden; }
+.codegen-result-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border2); }
+.codegen-result-title { font-size:12px; font-weight:700; color:var(--text); flex:1; }
+.codegen-result-meta { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
+.codegen-result-actions { display:flex; gap:6px; }
+.codegen-action-btn { padding:4px 10px; border-radius:99px; border:1px solid var(--border2); background:var(--surface); font-size:10px; font-weight:700; color:var(--text2); cursor:pointer; font-family:inherit; transition:all .15s; }
+.codegen-action-btn:hover { border-color:rgba(124,58,237,0.4); color:var(--neon); }
+.codegen-action-btn.dl { border-color:rgba(16,185,129,0.4); color:var(--green); }
+.codegen-result-code { padding:14px; font-family:'Space Mono',monospace; font-size:12px; color:var(--cyan); line-height:1.7; overflow-x:auto; max-height:350px; overflow-y:auto; white-space:pre; }
+.codegen-progress { display:flex; align-items:center; gap:10px; padding:14px; font-size:13px; color:var(--text2); }
+.codegen-spinner { width:18px; height:18px; border:2px solid var(--border2); border-top-color:var(--neon); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.codegen-upload-area { border:2px dashed var(--border2); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all .2s; }
+.codegen-upload-area:hover { border-color:rgba(124,58,237,0.4); background:rgba(124,58,237,0.03); }
+.codegen-upload-area.dragover { border-color:var(--neon); background:rgba(124,58,237,0.06); }
+.codegen-upload-icon { font-size:32px; margin-bottom:8px; }
+.codegen-upload-text { font-size:13px; color:var(--text2); }
+.codegen-upload-sub { font-size:11px; color:var(--text3); margin-top:4px; }
+.codegen-file-loaded { display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:10px; }
+.codegen-file-loaded-name { font-size:12px; font-weight:700; color:var(--text); flex:1; }
+.codegen-file-loaded-size { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
+.codegen-file-remove { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; }
 </style>
 
 <script>
@@ -1059,16 +1238,20 @@ function showVerifyMsg(msg,type) {
 //  MAIN TABS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function switchMainTab(tab) {
-  ['chat','stats','payment','profile'].forEach(t=>{
-    document.getElementById(`panel-${t}`).classList.remove('active');
-    document.getElementById(`nav-${t}`).classList.remove('active');
+  ['chat','codegen','stats','payment','profile'].forEach(t=>{
+    const panel = document.getElementById(`panel-${t}`);
+    const nav   = document.getElementById(`nav-${t}`);
+    if (panel) panel.classList.remove('active');
+    if (nav)   nav.classList.remove('active');
   });
-  document.getElementById(`panel-${tab}`).classList.add('active');
-  document.getElementById(`nav-${tab}`).classList.add('active');
-  if (tab==='stats') loadStats();
+  const activePanel = document.getElementById(`panel-${tab}`);
+  const activeNav   = document.getElementById(`nav-${tab}`);
+  if (activePanel) activePanel.classList.add('active');
+  if (activeNav)   activeNav.classList.add('active');
+  if (tab==='stats')   loadStats();
   if (tab==='profile') updateProfileUI();
   if (tab==='payment') loadPaymentInfo();
-  if (tab==='chat') setTimeout(()=>document.getElementById('input')?.focus(),100);
+  if (tab==='chat')    setTimeout(()=>document.getElementById('input')?.focus(),100);
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1352,28 +1535,60 @@ async function sendMessage(preset) {
   if(currentPlan==='free'&&messagesUsed>=messagesLimit){switchMainTab('payment');return}
   const input=document.getElementById('input'), sendBtn=document.getElementById('send-btn');
   const message=(preset||input.value).trim();
-  if(!message||busy) return;
+  if((!message && !currentAttachment)||busy) return;
+  const finalMsg = message || (currentAttachment ? `Analiza este archivo: ${currentAttachment.name}` : '');
   input.value=''; input.style.height='auto';
   busy=true; sendBtn.disabled=true;
-  addMessage(message,'user'); hPush('user',message);
+
+  // Show user message with file attachment
+  const fileSnapshot = currentAttachment;
+  addMessageWithFile(finalMsg,'user',{},fileSnapshot);
+  hPush('user', finalMsg + (fileSnapshot ? ` [📎 ${fileSnapshot.name}]` : ''));
+
+  // Clear attachment after sending
+  if (fileSnapshot) clearAttachment();
+
   showThinking();
   document.getElementById('hint').textContent='NEXUS está procesando…';
   const ctrl=new AbortController();
-  const timer=setTimeout(()=>ctrl.abort(),125000);
+  const timer=setTimeout(()=>ctrl.abort(),300000); // 5 min timeout para archivos grandes
+
   try {
-    const res=await fetch('/api/chat',{method:'POST',headers:getAuthHeaders(),signal:ctrl.signal,body:JSON.stringify({message,conversationId,history:hGetServerHistory()})});
+    let res, data;
+
+    if (fileSnapshot) {
+      // Use file chat endpoint
+      res = await fetch('/api/chat-with-file', {
+        method:'POST', headers:getAuthHeaders(), signal:ctrl.signal,
+        body: JSON.stringify({
+          message: finalMsg, conversationId, history: hGetServerHistory(),
+          fileData: {
+            type:        fileSnapshot.type,
+            name:        fileSnapshot.name,
+            size:        fileSnapshot.size,
+            mimeType:    fileSnapshot.mimeType,
+            textSummary: fileSnapshot.textSummary,
+            text:        fileSnapshot.text || null,
+            base64:      fileSnapshot.type === 'image' ? fileSnapshot.base64 : null
+          }
+        })
+      });
+    } else {
+      res = await fetch('/api/chat',{method:'POST',headers:getAuthHeaders(),signal:ctrl.signal,body:JSON.stringify({message:finalMsg,conversationId,history:hGetServerHistory()})});
+    }
+
     clearTimeout(timer);
     if(res.status===401){doLogout();return}
     if(res.status===402){
       hideThinking();
-      const data=await res.json();
-      messagesUsed=data.messagesUsed||messagesLimit;
-      if(data.resetsAt) resetsAt=data.resetsAt;
+      const d=await res.json();
+      messagesUsed=d.messagesUsed||messagesLimit;
+      if(d.resetsAt) resetsAt=d.resetsAt;
       updateLimitBanner(); updateProfileUI();
-      addError(data.message||`Límite de ${messagesLimit} mensajes diarios alcanzado.`);
+      addError(d.message||`Límite de ${messagesLimit} mensajes diarios alcanzado.`);
       busy=false; sendBtn.disabled=false; input.focus(); return;
     }
-    const data=await res.json();
+    data=await res.json();
     clearTimeout(timer); hideThinking();
     if(!res.ok){addError(data.message||'Error del servidor');setStatus(false,'Error');return}
     if(data.conversationId) conversationId=data.conversationId;
@@ -1383,13 +1598,13 @@ async function sendMessage(preset) {
     if(data.brainVersion){currentBrainVersion=data.brainVersion;updateBrainVersionBadge()}
     updateLimitBanner(); updateProfileUI();
     let finalMessage=data.message||data.response;
-    if(!data.llmUsed&&ollamaAvailable){
-      try{const or=await callOllamaLocal(message);if(or&&or.trim().length>10)finalMessage=or}catch(e){}
+    if(!data.llmUsed&&ollamaAvailable&&!fileSnapshot){
+      try{const or=await callOllamaLocal(finalMsg);if(or&&or.trim().length>10)finalMessage=or}catch(e){}
     }
-    addMessage(finalMessage,'ai',data); hPush('ai',finalMessage);
+    addMessageWithFile(finalMessage,'ai',data,null); hPush('ai',finalMessage);
     if(data.neuralActivity||data.neural_activity) updateStats(data.neuralActivity||data.neural_activity);
     setStatus(true,'Cerebro activo');
-    document.getElementById('hint').textContent='NEXUS listo · Enter para enviar';
+    document.getElementById('hint').textContent='NEXUS listo · 📎 adjunta archivos · Enter para enviar';
   } catch(err) {
     hideThinking();
     if(err.name==='AbortError') addError('Tiempo de espera agotado. Intenta de nuevo.');
@@ -1493,6 +1708,283 @@ window.addEventListener('appinstalled',()=>{document.getElementById('pwa-banner'
 ['reg-username','reg-email','reg-password'].forEach(id=>{
   document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter') doRegister()});
 });
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ARCHIVO ADJUNTO — CHAT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let currentAttachment = null; // { type, name, size, base64, thumbBase64, text, textSummary, mimeType, meta }
+
+function getFileIcon(name, type) {
+  const ext = name.split('.').pop().toLowerCase();
+  const icons = {
+    py:'🐍', js:'🟨', ts:'🔷', jsx:'⚛️', tsx:'⚛️', html:'🌐', css:'🎨',
+    json:'📋', cpp:'⚙️', c:'⚙️', cs:'💎', java:'☕', go:'🔵', rs:'🦀',
+    php:'🐘', rb:'💎', sh:'📟', sql:'🗄️', yaml:'📝', yml:'📝', md:'📄',
+    pdf:'📕', docx:'📘', doc:'📘', xlsx:'📗', txt:'📄', zip:'📦',
+    jpg:'🖼️', jpeg:'🖼️', png:'🖼️', gif:'🖼️', webp:'🖼️', svg:'🖼️'
+  };
+  return icons[ext] || (type?.startsWith('image/') ? '🖼️' : '📎');
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  await uploadAttachment(file);
+  event.target.value = ''; // reset input
+}
+
+async function uploadAttachment(file) {
+  const attachBtn = document.getElementById('attach-btn');
+  const bar       = document.getElementById('file-preview-bar');
+  const inner     = document.getElementById('file-preview-inner');
+
+  // Show loading state
+  attachBtn.classList.add('has-file');
+  bar.style.display = 'flex';
+  inner.innerHTML = `<div class="file-preview-icon">⏳</div><div class="file-preview-info"><div class="file-preview-name">Procesando ${file.name}...</div><div class="file-preview-meta">${fmtSize(file.size)}</div></div>`;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res  = await fetch('/api/upload', { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }, body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al subir');
+
+    currentAttachment = data;
+
+    // Show preview
+    let previewHtml = '';
+    if (data.type === 'image' && data.thumbBase64) {
+      previewHtml = `<img src="data:${data.mimeType};base64,${data.thumbBase64}" class="file-preview-thumb" alt="${data.name}">`;
+    } else {
+      previewHtml = `<div class="file-preview-icon">${getFileIcon(data.name, data.mimeType)}</div>`;
+    }
+    inner.innerHTML = `${previewHtml}<div class="file-preview-info"><div class="file-preview-name">${data.name}</div><div class="file-preview-meta">${fmtSize(data.size)} · ${data.type.toUpperCase()}${data.pages ? ' · ' + data.pages + ' páginas' : ''}${data.meta?.width ? ' · ' + data.meta.width + 'x' + data.meta.height : ''}</div></div>`;
+    document.getElementById('input').placeholder = `Pregunta sobre "${data.name}" o simplemente envía…`;
+  } catch(e) {
+    clearAttachment();
+    addError(`Error al subir archivo: ${e.message}`);
+  }
+}
+
+function clearAttachment() {
+  currentAttachment = null;
+  document.getElementById('attach-btn').classList.remove('has-file');
+  document.getElementById('file-preview-bar').style.display = 'none';
+  document.getElementById('file-preview-inner').innerHTML = '';
+  document.getElementById('input').placeholder = 'Escribe tu mensaje…';
+}
+
+// Drag & drop en el chat
+const inputZone = document.querySelector('.input-zone');
+if (inputZone) {
+  inputZone.addEventListener('dragover', (e) => { e.preventDefault(); inputZone.style.background='rgba(124,58,237,0.06)'; });
+  inputZone.addEventListener('dragleave', () => { inputZone.style.background=''; });
+  inputZone.addEventListener('drop', async (e) => {
+    e.preventDefault(); inputZone.style.background='';
+    const file = e.dataTransfer.files[0];
+    if (file) await uploadAttachment(file);
+  });
+}
+
+// Override addMessage para mostrar archivo adjunto
+function addMessageWithFile(content, role='ai', extras={}, fileData=null) {
+  const welcome = document.getElementById('welcome-screen');
+  if (welcome) welcome.remove();
+  const msgs = document.getElementById('messages');
+  const wrap  = document.createElement('div');
+  const now   = new Date();
+  const timeStr = now.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+
+  if (role === 'user') {
+    wrap.className = 'msg msg-user';
+    const initial = currentUser?.username?.[0]?.toUpperCase() || 'U';
+    let fileHtml = '';
+    if (fileData) {
+      if (fileData.type === 'image' && fileData.thumbBase64) {
+        fileHtml = `<div class="msg-img-preview"><img src="data:${fileData.mimeType};base64,${fileData.thumbBase64}" alt="${fileData.name}"></div>`;
+      } else {
+        fileHtml = `<div class="msg-file-attach"><div class="msg-file-chip"><span class="msg-file-chip-icon">${getFileIcon(fileData.name, fileData.mimeType)}</span><div><div class="msg-file-chip-name">${fileData.name}</div><div class="msg-file-chip-size">${fmtSize(fileData.size)}</div></div></div></div>`;
+      }
+    }
+    wrap.innerHTML = `<div class="msg-header"><div class="msg-avatar" style="font-size:12px;font-weight:700;font-family:'Space Mono',monospace;background:var(--bg3);color:var(--text2)">${initial}</div><span class="msg-name">Tú</span><span class="msg-ts">${timeStr}</span></div>${fileHtml}<div class="msg-bubble">${renderMd(content)}</div>`;
+  } else {
+    wrap.className = 'msg msg-ai';
+    let chipsHtml = '';
+    if (extras.neuralActivity) {
+      const a = extras.neuralActivity;
+      chipsHtml = `<div class="neural-chips">${a.rank_loss!==undefined?`<div class="chip"><div class="chip-dot" style="background:var(--accent3)"></div>loss ${a.rank_loss.toFixed?.(4)||a.rank_loss}</div>`:''} ${a.vocab_size!==undefined?`<div class="chip"><div class="chip-dot" style="background:var(--green)"></div>vocab ${a.vocab_size}</div>`:''} ${a.episodes!==undefined?`<div class="chip"><div class="chip-dot" style="background:var(--cyan)"></div>ep ${a.episodes}</div>`:''} ${a.trainings!==undefined?`<div class="chip"><div class="chip-dot" style="background:var(--neon)"></div>train ${a.trainings}</div>`:''}</div>`;
+    }
+    const headerDiv = document.createElement('div'); headerDiv.className='msg-header';
+    headerDiv.innerHTML = `<div class="msg-avatar">🧠</div><span class="msg-name">NEXUS</span><span class="msg-ts">${timeStr}</span>`;
+    const bubble = document.createElement('div'); bubble.className='msg-bubble';
+    bubble.innerHTML = renderMd(content) + (chipsHtml||'');
+    const copyBtn = makeCopyBtn(content);
+    wrap.appendChild(headerDiv); wrap.appendChild(bubble); wrap.appendChild(copyBtn);
+  }
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+  return wrap;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  CODEGEN PANEL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let cgOp = 'create';
+let cgLoadedFile = null; // { name, size, content }
+let cgLastDownloadUrl = null;
+
+function setCgOp(op, btn) {
+  cgOp = op;
+  document.querySelectorAll('.codegen-op-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const uploadSection = document.getElementById('cg-upload-section');
+  if (['edit','fix','analyze','extend'].includes(op)) {
+    uploadSection.style.display = 'block';
+  } else {
+    uploadSection.style.display = 'none';
+  }
+}
+
+async function cgLoadFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    cgLoadedFile = { name: file.name, size: file.size, content: text };
+    document.getElementById('cg-drop-area').style.display  = 'none';
+    document.getElementById('cg-file-loaded').style.display = 'flex';
+    document.getElementById('cg-file-loaded-name').textContent = file.name;
+    document.getElementById('cg-file-loaded-size').textContent = fmtSize(file.size) + ' · ' + text.split('\n').length + ' líneas';
+    // Auto-fill filename
+    if (!document.getElementById('cg-filename').value) {
+      document.getElementById('cg-filename').value = file.name;
+    }
+    // Auto-select type
+    const ext = file.name.split('.').pop().toLowerCase();
+    const sel = document.getElementById('cg-type');
+    for (let opt of sel.options) { if (opt.value === ext) { sel.value = ext; break; } }
+  } catch(e) { addError('Error leyendo archivo: ' + e.message); }
+}
+
+function cgClearFile() {
+  cgLoadedFile = null;
+  document.getElementById('cg-drop-area').style.display   = 'block';
+  document.getElementById('cg-file-loaded').style.display = 'none';
+  document.getElementById('cg-file-input').value = '';
+}
+
+function cgDragOver(e) { e.preventDefault(); document.getElementById('cg-drop-area').classList.add('dragover'); }
+function cgDragLeave()  { document.getElementById('cg-drop-area').classList.remove('dragover'); }
+async function cgDrop(e) {
+  e.preventDefault(); cgDragLeave();
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const fakeEvt = { target: { files: [file], value: '' } };
+    await cgLoadFile(fakeEvt);
+  }
+}
+
+async function cgSubmit() {
+  const prompt    = document.getElementById('cg-prompt').value.trim();
+  const fileType  = document.getElementById('cg-type').value;
+  const rawName   = document.getElementById('cg-filename').value.trim();
+  const fileName  = rawName || `nexus_output.${fileType}`;
+
+  if (!prompt) { document.getElementById('cg-prompt').focus(); return; }
+  if (['edit','fix','analyze','extend'].includes(cgOp) && !cgLoadedFile) {
+    addError('Sube un archivo para la operación ' + cgOp); return;
+  }
+
+  const submitBtn = document.getElementById('cg-submit-btn');
+  const progress  = document.getElementById('cg-progress');
+  const result    = document.getElementById('cg-result');
+  submitBtn.disabled = true;
+  progress.style.display = 'flex';
+  result.style.display   = 'none';
+  cgLastDownloadUrl = null;
+
+  const progressText = document.getElementById('cg-progress-text');
+  let dots = 0;
+  const progressInterval = setInterval(() => {
+    dots = (dots + 1) % 4;
+    progressText.textContent = 'NEXUS generando' + '.'.repeat(dots) + ' (puede tomar hasta 2 min para archivos grandes)';
+  }, 800);
+
+  try {
+    const body = {
+      prompt,
+      fileType,
+      fileName,
+      operation: cgOp,
+      currentContent: cgLoadedFile?.content || null
+    };
+    const res  = await fetch('/api/generate-file', {
+      method: 'POST',
+      headers: { ...getAuthHeaders() },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    clearInterval(progressInterval);
+    progress.style.display = 'none';
+    if (!res.ok) { addError(data.error || 'Error generando archivo'); submitBtn.disabled = false; return; }
+
+    const content = data.content || '';
+    const cleanContent = (() => {
+      const m = content.match(/```[\w]*\n?([\s\S]*?)```/);
+      return m ? m[1] : content;
+    })();
+
+    document.getElementById('cg-result-title').textContent = data.fileName || fileName;
+    document.getElementById('cg-result-meta').textContent  = `${data.lines || cleanContent.split('\n').length} líneas · ${(data.chars || cleanContent.length).toLocaleString()} chars`;
+    document.getElementById('cg-result-code').textContent  = cleanContent;
+
+    const dlBtn = document.getElementById('cg-dl-btn');
+    if (data.downloadUrl) {
+      cgLastDownloadUrl = data.downloadUrl;
+      dlBtn.style.display = 'inline-flex';
+    } else {
+      dlBtn.style.display = 'none';
+    }
+    result.style.display = 'block';
+
+    // If editing, update loaded file with new content
+    if (['edit','fix','extend'].includes(cgOp) && cgLoadedFile) {
+      cgLoadedFile.content = cleanContent;
+      document.getElementById('cg-file-loaded-size').textContent =
+        fmtSize(new Blob([cleanContent]).size) + ' · ' + cleanContent.split('\n').length + ' líneas';
+    }
+
+  } catch(e) {
+    clearInterval(progressInterval);
+    progress.style.display = 'none';
+    addError('Error: ' + e.message);
+  }
+  submitBtn.disabled = false;
+}
+
+function cgCopyResult() {
+  const code = document.getElementById('cg-result-code').textContent;
+  navigator.clipboard?.writeText(code).then(() => {
+    const btn = document.querySelector('.codegen-action-btn');
+    const orig = btn.textContent; btn.textContent = '✅ Copiado';
+    setTimeout(() => btn.textContent = orig, 2000);
+  }).catch(() => {});
+}
+
+function cgDownload() {
+  if (!cgLastDownloadUrl) return;
+  const a = document.createElement('a');
+  a.href = cgLastDownloadUrl;
+  a.download = document.getElementById('cg-result-title').textContent;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  INIT
