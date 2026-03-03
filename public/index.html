@@ -175,12 +175,13 @@
     <!-- File preview bar -->
     <div class="file-preview-bar" id="file-preview-bar" style="display:none">
       <div class="file-preview-inner" id="file-preview-inner"></div>
-      <button class="file-preview-clear" onclick="clearAttachment()" title="Quitar archivo">✕</button>
+      <button class="file-add-btn" id="file-add-btn" onclick="document.getElementById('file-input').click()" title="Agregar segundo archivo para comparar" style="display:none">＋</button>
+      <button class="file-preview-clear" onclick="clearAttachment()" title="Quitar archivos">✕</button>
     </div>
 
     <div class="input-zone">
       <!-- Hidden file input -->
-      <input type="file" id="file-input" style="display:none" onchange="handleFileSelect(event)"
+      <input type="file" id="file-input" style="display:none" onchange="handleFileSelect(event)" multiple
         accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.txt,.md,.js,.ts,.jsx,.tsx,.py,.cpp,.c,.h,.cs,.java,.go,.rs,.php,.rb,.sh,.sql,.yaml,.yml,.json,.html,.css,.xml,.csv,.zip">
       <div class="input-row">
         <button class="attach-btn" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Adjuntar archivo (imágenes, PDF, código, docs...)">
@@ -656,6 +657,12 @@
 .file-preview-meta { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
 .file-preview-clear { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:4px; border-radius:6px; transition:all .15s; }
 .file-preview-clear:hover { color:var(--hot); }
+.file-add-btn { background:rgba(124,58,237,0.12); border:1px dashed rgba(124,58,237,0.4); color:var(--neon); cursor:pointer; font-size:16px; padding:3px 8px; border-radius:8px; transition:all .15s; flex-shrink:0; }
+.file-add-btn:hover { background:rgba(124,58,237,0.22); }
+.file-compare-badge { font-size:9px; font-weight:700; color:var(--neon); background:rgba(124,58,237,0.18); border:1px solid rgba(124,58,237,0.3); border-radius:4px; padding:1px 5px; text-transform:uppercase; letter-spacing:.5px; margin-left:6px; }
+.file-preview-inner { flex:1; display:flex; align-items:center; gap:8px; overflow:hidden; flex-wrap:nowrap; }
+.file-slot { display:flex; align-items:center; gap:6px; background:var(--bg2); border:1px solid var(--border2); border-radius:8px; padding:4px 8px; max-width:200px; flex-shrink:0; position:relative; }
+.file-slot-remove { position:absolute; top:-5px; right:-5px; width:15px; height:15px; border-radius:50%; background:var(--hot); color:#fff; border:none; cursor:pointer; font-size:9px; display:flex; align-items:center; justify-content:center; line-height:1; }
 
 /* ── FILE ATTACHMENT in message ── */
 .msg-file-attach { display:flex; align-items:center; gap:10px; padding-left:39px; margin-bottom:8px; }
@@ -1553,17 +1560,19 @@ async function sendMessage(preset) {
   if(currentPlan==='free'&&messagesUsed>=messagesLimit){switchMainTab('payment');return}
   const input=document.getElementById('input'), sendBtn=document.getElementById('send-btn');
   const message=(preset||input.value).trim();
-  if((!message && !currentAttachment)||busy) return;
-  const finalMsg = message || (currentAttachment ? `Analiza este archivo: ${currentAttachment.name}` : '');
+  if((!message && !currentAttachments.length)||busy) return;
+  const finalMsg = message || (currentAttachments.length === 2 ? `Compara estos dos archivos: ${currentAttachments[0].name} vs ${currentAttachments[1].name}` : currentAttachments.length ? `Analiza este archivo: ${currentAttachments[0].name}` : '');
   input.value=''; input.style.height='auto';
   busy=true; sendBtn.disabled=true;
 
   // Show user message with file attachment
-  const fileSnapshot = currentAttachment;
-  addMessageWithFile(finalMsg,'user',{},fileSnapshot);
-  hPush('user', finalMsg + (fileSnapshot ? ` [📎 ${fileSnapshot.name}]` : ''));
+  const fileSnapshot  = currentAttachments[0] || null;
+  const fileSnapshot2 = currentAttachments[1] || null;
+  addMessageWithFile(finalMsg,'user',{},fileSnapshot, fileSnapshot2);
+  const fileLabel = fileSnapshot2 ? ` [📎 ${fileSnapshot.name} vs ${fileSnapshot2.name}]` : fileSnapshot ? ` [📎 ${fileSnapshot.name}]` : '';
+  hPush('user', finalMsg + fileLabel);
 
-  // Clear attachment after sending
+  // Clear attachments after sending
   if (fileSnapshot) clearAttachment();
 
   showThinking();
@@ -1575,21 +1584,33 @@ async function sendMessage(preset) {
     let res, data;
 
     if (fileSnapshot) {
-      // Use file chat endpoint
+      // Use file chat endpoint (soporta 1 o 2 archivos para comparación)
+      const body = {
+        message: finalMsg, conversationId, history: hGetServerHistory(),
+        fileData: {
+          type:        fileSnapshot.type,
+          name:        fileSnapshot.name,
+          size:        fileSnapshot.size,
+          mimeType:    fileSnapshot.mimeType,
+          textSummary: fileSnapshot.textSummary,
+          text:        fileSnapshot.text || null,
+          base64:      fileSnapshot.type === 'image' ? fileSnapshot.base64 : null
+        }
+      };
+      if (fileSnapshot2) {
+        body.fileData2 = {
+          type:        fileSnapshot2.type,
+          name:        fileSnapshot2.name,
+          size:        fileSnapshot2.size,
+          mimeType:    fileSnapshot2.mimeType,
+          textSummary: fileSnapshot2.textSummary,
+          text:        fileSnapshot2.text || null,
+          base64:      fileSnapshot2.type === 'image' ? fileSnapshot2.base64 : null
+        };
+      }
       res = await fetch('/api/chat-with-file', {
         method:'POST', headers:getAuthHeaders(), signal:ctrl.signal,
-        body: JSON.stringify({
-          message: finalMsg, conversationId, history: hGetServerHistory(),
-          fileData: {
-            type:        fileSnapshot.type,
-            name:        fileSnapshot.name,
-            size:        fileSnapshot.size,
-            mimeType:    fileSnapshot.mimeType,
-            textSummary: fileSnapshot.textSummary,
-            text:        fileSnapshot.text || null,
-            base64:      fileSnapshot.type === 'image' ? fileSnapshot.base64 : null
-          }
-        })
+        body: JSON.stringify(body)
       });
     } else {
       res = await fetch('/api/chat',{method:'POST',headers:getAuthHeaders(),signal:ctrl.signal,body:JSON.stringify({message:finalMsg,conversationId,history:hGetServerHistory()})});
@@ -1741,7 +1762,7 @@ window.addEventListener('appinstalled',()=>{document.getElementById('pwa-banner'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  ARCHIVO ADJUNTO — CHAT
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let currentAttachment = null; // { type, name, size, base64, thumbBase64, text, textSummary, mimeType, meta }
+let currentAttachments = []; // Array de hasta 2 archivos — soporta comparación
 
 function getFileIcon(name, type) {
   const ext = name.split('.').pop().toLowerCase();
@@ -1762,21 +1783,31 @@ function fmtSize(bytes) {
 }
 
 async function handleFileSelect(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  await uploadAttachment(file);
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+  for (const file of files.slice(0, 2 - currentAttachments.length)) {
+    await uploadAttachment(file);
+  }
   event.target.value = ''; // reset input
 }
 
 async function uploadAttachment(file) {
+  if (currentAttachments.length >= 2) return; // máximo 2 archivos
   const attachBtn = document.getElementById('attach-btn');
   const bar       = document.getElementById('file-preview-bar');
   const inner     = document.getElementById('file-preview-inner');
+  const addBtn    = document.getElementById('file-add-btn');
 
-  // Show loading state
   attachBtn.classList.add('has-file');
   bar.style.display = 'flex';
-  inner.innerHTML = `<div class="file-preview-icon">⏳</div><div class="file-preview-info"><div class="file-preview-name">Procesando ${file.name}...</div><div class="file-preview-meta">${fmtSize(file.size)}</div></div>`;
+
+  // Mostrar spinner para este slot
+  const slotId = `slot-${currentAttachments.length}`;
+  const spinnerSlot = document.createElement('div');
+  spinnerSlot.id = slotId;
+  spinnerSlot.className = 'file-slot';
+  spinnerSlot.innerHTML = `<span>⏳</span><span style="font-size:11px;color:var(--text3)">Subiendo...</span>`;
+  inner.appendChild(spinnerSlot);
 
   try {
     const formData = new FormData();
@@ -1785,28 +1816,69 @@ async function uploadAttachment(file) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error al subir');
 
-    currentAttachment = data;
+    currentAttachments.push(data);
+    const idx = currentAttachments.length - 1;
 
-    // Show preview
-    let previewHtml = '';
-    if (data.type === 'image' && data.thumbBase64) {
-      previewHtml = `<img src="data:${data.mimeType};base64,${data.thumbBase64}" class="file-preview-thumb" alt="${data.name}">`;
-    } else {
-      previewHtml = `<div class="file-preview-icon">${getFileIcon(data.name, data.mimeType)}</div>`;
+    // Renderizar el slot definitivo
+    let thumb = data.type === 'image' && data.thumbBase64
+      ? `<img src="data:${data.mimeType};base64,${data.thumbBase64}" class="file-preview-thumb" style="width:28px;height:28px;border-radius:5px;object-fit:cover" alt="${data.name}">`
+      : `<span style="font-size:18px">${getFileIcon(data.name, data.mimeType)}</span>`;
+    spinnerSlot.innerHTML = `
+      ${thumb}
+      <div style="min-width:0">
+        <div class="file-preview-name" style="font-size:11px">${data.name}</div>
+        <div class="file-preview-meta">${fmtSize(data.size)}</div>
+      </div>
+      <button class="file-slot-remove" onclick="removeAttachment(${idx})" title="Quitar">✕</button>`;
+
+    // Mostrar botón "+" si hay slot disponible y llegamos a 1
+    if (currentAttachments.length === 1) {
+      addBtn.style.display = 'flex';
+      document.getElementById('input').placeholder = `Escribe tu pregunta o agrega otro archivo para comparar…`;
+    } else if (currentAttachments.length === 2) {
+      addBtn.style.display = 'none';
+      const [a, b] = currentAttachments;
+      const badge = `<span class="file-compare-badge">⚖️ COMPARAR</span>`;
+      document.getElementById('input').placeholder = `¿Cuál es mejor? ¿Qué diferencias hay? NEXUS los comparará…`;
     }
-    inner.innerHTML = `${previewHtml}<div class="file-preview-info"><div class="file-preview-name">${data.name}</div><div class="file-preview-meta">${fmtSize(data.size)} · ${data.type.toUpperCase()}${data.pages ? ' · ' + data.pages + ' páginas' : ''}${data.meta?.width ? ' · ' + data.meta.width + 'x' + data.meta.height : ''}</div></div>`;
-    document.getElementById('input').placeholder = `Pregunta sobre "${data.name}" o simplemente envía…`;
   } catch(e) {
-    clearAttachment();
+    inner.removeChild(spinnerSlot);
+    if (!currentAttachments.length) clearAttachment();
     addError(`Error al subir archivo: ${e.message}`);
   }
 }
 
+function removeAttachment(idx) {
+  currentAttachments.splice(idx, 1);
+  renderAttachmentSlots();
+}
+
+function renderAttachmentSlots() {
+  const inner  = document.getElementById('file-preview-inner');
+  const addBtn = document.getElementById('file-add-btn');
+  const bar    = document.getElementById('file-preview-bar');
+  inner.innerHTML = '';
+  if (!currentAttachments.length) { clearAttachment(); return; }
+  currentAttachments.forEach((data, idx) => {
+    let thumb = data.type === 'image' && data.thumbBase64
+      ? `<img src="data:${data.mimeType};base64,${data.thumbBase64}" class="file-preview-thumb" style="width:28px;height:28px;border-radius:5px;object-fit:cover" alt="${data.name}">`
+      : `<span style="font-size:18px">${getFileIcon(data.name, data.mimeType)}</span>`;
+    const slot = document.createElement('div');
+    slot.className = 'file-slot';
+    slot.innerHTML = `${thumb}<div style="min-width:0"><div class="file-preview-name" style="font-size:11px">${data.name}</div><div class="file-preview-meta">${fmtSize(data.size)}</div></div><button class="file-slot-remove" onclick="removeAttachment(${idx})" title="Quitar">✕</button>`;
+    inner.appendChild(slot);
+  });
+  addBtn.style.display = currentAttachments.length < 2 ? 'flex' : 'none';
+  document.getElementById('attach-btn').classList.add('has-file');
+  bar.style.display = 'flex';
+}
+
 function clearAttachment() {
-  currentAttachment = null;
+  currentAttachments = [];
   document.getElementById('attach-btn').classList.remove('has-file');
   document.getElementById('file-preview-bar').style.display = 'none';
   document.getElementById('file-preview-inner').innerHTML = '';
+  document.getElementById('file-add-btn').style.display = 'none';
   document.getElementById('input').placeholder = 'Escribe tu mensaje…';
 }
 
@@ -1818,12 +1890,12 @@ if (inputZone) {
   inputZone.addEventListener('drop', async (e) => {
     e.preventDefault(); inputZone.style.background='';
     const file = e.dataTransfer.files[0];
-    if (file) await uploadAttachment(file);
+    for (const f of Array.from(e.dataTransfer.files).slice(0, 2 - currentAttachments.length)) { await uploadAttachment(f); }
   });
 }
 
 // Override addMessage para mostrar archivo adjunto
-function addMessageWithFile(content, role='ai', extras={}, fileData=null) {
+function addMessageWithFile(content, role='ai', extras={}, fileData=null, fileData2=null) {
   const welcome = document.getElementById('welcome-screen');
   if (welcome) welcome.remove();
   const msgs = document.getElementById('messages');
@@ -1836,11 +1908,13 @@ function addMessageWithFile(content, role='ai', extras={}, fileData=null) {
     const initial = currentUser?.username?.[0]?.toUpperCase() || 'U';
     let fileHtml = '';
     if (fileData) {
-      if (fileData.type === 'image' && fileData.thumbBase64) {
-        fileHtml = `<div class="msg-img-preview"><img src="data:${fileData.mimeType};base64,${fileData.thumbBase64}" alt="${fileData.name}"></div>`;
-      } else {
-        fileHtml = `<div class="msg-file-attach"><div class="msg-file-chip"><span class="msg-file-chip-icon">${getFileIcon(fileData.name, fileData.mimeType)}</span><div><div class="msg-file-chip-name">${fileData.name}</div><div class="msg-file-chip-size">${fmtSize(fileData.size)}</div></div></div></div>`;
-      }
+      const makeChip = (fd) => fd.type === 'image' && fd.thumbBase64
+        ? `<div class="msg-img-preview"><img src="data:${fd.mimeType};base64,${fd.thumbBase64}" alt="${fd.name}"></div>`
+        : `<div class="msg-file-chip"><span class="msg-file-chip-icon">${getFileIcon(fd.name, fd.mimeType)}</span><div><div class="msg-file-chip-name">${fd.name}</div><div class="msg-file-chip-size">${fmtSize(fd.size)}</div></div></div>`;
+      const chips = [makeChip(fileData), fileData2 ? makeChip(fileData2) : ''].join('');
+      const vsLabel = fileData2 ? `<span class="file-compare-badge">⚖️ COMPARAR</span>` : '';
+      fileHtml = `<div class="msg-file-attach" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${chips}${vsLabel}</div>`;
+      if (false) {
     }
     wrap.innerHTML = `<div class="msg-header"><div class="msg-avatar" style="font-size:12px;font-weight:700;font-family:'Space Mono',monospace;background:var(--bg3);color:var(--text2)">${initial}</div><span class="msg-name">Tú</span><span class="msg-ts">${timeStr}</span></div>${fileHtml}<div class="msg-bubble">${renderMd(content)}</div>`;
   } else {
