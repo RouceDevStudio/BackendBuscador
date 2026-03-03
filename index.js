@@ -6,10 +6,53 @@ const cheerio     = require('cheerio');
 const path        = require('path');
 const { spawn }   = require('child_process');
 const fs          = require('fs').promises;
+const fsSync      = require('fs');
 const MongoClient = require('mongodb').MongoClient;
 const bcrypt      = require('bcryptjs');
 const jwt         = require('jsonwebtoken');
 const crypto      = require('crypto');
+
+// ── Multipart / File Upload ──────────────────────────────────────────
+let multer, sharp, mammoth, pdfParse;
+try { multer   = require('multer');   } catch(e) { console.warn('⚠️  multer no disponible'); }
+try { sharp    = require('sharp');    } catch(e) { console.warn('⚠️  sharp no disponible'); }
+try { mammoth  = require('mammoth');  } catch(e) { console.warn('⚠️  mammoth no disponible'); }
+try { pdfParse = require('pdf-parse'); } catch(e) { console.warn('⚠️  pdf-parse no disponible'); }
+
+// ── Upload dirs ─────────────────────────────────────────────────────
+const UPLOAD_DIR   = path.join(__dirname, 'uploads_tmp');
+const GENERATED_DIR= path.join(__dirname, 'generated');
+[UPLOAD_DIR, GENERATED_DIR].forEach(d => { try { fsSync.mkdirSync(d, { recursive: true }); } catch(e){} });
+
+// Multer storage — guardar en disco temporal
+const _multerStorage = multer ? multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename:    (req, file, cb) => cb(null, `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${path.extname(file.originalname)}`)
+}) : null;
+const upload = multer ? multer({
+    storage: _multerStorage,
+    limits:  { fileSize: 50 * 1024 * 1024 }, // 50 MB
+    fileFilter: (req, file, cb) => {
+        const allowed = [
+            'image/jpeg','image/png','image/gif','image/webp','image/svg+xml',
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/plain','text/html','text/css','application/javascript',
+            'application/json','text/csv','application/xml','text/xml',
+            'application/x-python','text/x-python',
+            'application/zip','application/x-zip-compressed'
+        ];
+        const ext = path.extname(file.originalname).toLowerCase();
+        const extraExts = ['.py','.js','.ts','.jsx','.tsx','.cpp','.c','.h','.cs','.java',
+                           '.go','.rs','.php','.rb','.swift','.kt','.sh','.bash','.sql',
+                           '.yaml','.yml','.toml','.env','.md','.mdx','.txt','.csv',
+                           '.html','.css','.json','.xml','.svg','.zip','.pdf','.docx','.xlsx'];
+        if (allowed.includes(file.mimetype) || extraExts.includes(ext)) { cb(null, true); }
+        else { cb(new Error(`Tipo de archivo no soportado: ${file.mimetype}`)); }
+    }
+}) : null;
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -33,9 +76,11 @@ const rateLimitStore = new Map();
 const loginAttempts  = new Map();
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(express.static('public'));
-app.use((req, res, next) => { res.setTimeout(130000); next(); });
+app.use('/generated', express.static(GENERATED_DIR));
+app.use((req, res, next) => { res.setTimeout(600000); next(); }); // 10 min timeout para generación de archivos grandes
 
 // ══════════════════════════════════════════════════════════════════
 //  BASE DE DATOS
@@ -822,21 +867,306 @@ app.get('/health', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════
+//  UTILIDADES DE ARCHIVO — extracción de contenido
+// ══════════════════════════════════════════════════════════════════
+
+async function extractFileContent(filePath, mimeType, originalName) {
+    const ext = path.extname(originalName).toLowerCase();
+    try {
+        // Imágenes → base64 para enviar al LLM
+        if (mimeType?.startsWith('image/') || ['.jpg','.jpeg','.png','.gif','.webp','.svg'].includes(ext)) {
+            const buf = await fs.readFile(filePath);
+            const b64 = buf.toString('base64');
+            let meta = { width: 0, height: 0, format: ext.slice(1) };
+            if (sharp) { try { meta = await sharp(buf).metadata(); } catch(e){} }
+            return {
+                type: 'image',
+                base64: b64,
+                mimeType: mimeType || `image/${ext.slice(1)}`,
+                meta,
+                textSummary: `[Imagen adjunta: ${originalName}, ${meta.width}x${meta.height} ${meta.format}]`
+            };
+        }
+        // PDF → texto
+        if (mimeType === 'application/pdf' || ext === '.pdf') {
+            if (pdfParse) {
+                const buf = await fs.readFile(filePath);
+                const result = await pdfParse(buf);
+                return { type: 'pdf', text: result.text, pages: result.numpages, textSummary: `[PDF: ${originalName}, ${result.numpages} páginas]\n\n${result.text.slice(0, 50000)}` };
+            }
+            return { type: 'pdf', text: '[PDF — instala pdf-parse para extracción de texto]', textSummary: `[PDF adjunto: ${originalName}]` };
+        }
+        // DOCX → texto
+        if (['.docx','.doc'].includes(ext) || mimeType?.includes('wordprocessingml')) {
+            if (mammoth) {
+                const buf = await fs.readFile(filePath);
+                const result = await mammoth.extractRawText({ buffer: buf });
+                return { type: 'docx', text: result.value, textSummary: `[Documento Word: ${originalName}]\n\n${result.value.slice(0, 50000)}` };
+            }
+            return { type: 'docx', text: '[DOCX — instala mammoth para extracción]', textSummary: `[DOCX adjunto: ${originalName}]` };
+        }
+        // Texto plano, código, etc.
+        const textExts = ['.txt','.md','.js','.ts','.jsx','.tsx','.py','.cpp','.c','.h','.cs',
+                          '.java','.go','.rs','.php','.rb','.swift','.kt','.sh','.bash','.sql',
+                          '.yaml','.yml','.toml','.env','.html','.css','.json','.xml','.csv','.log'];
+        if (textExts.includes(ext) || mimeType?.startsWith('text/') || mimeType === 'application/json') {
+            const text = await fs.readFile(filePath, 'utf-8');
+            return { type: 'code', ext: ext.slice(1), text, textSummary: `[Archivo ${originalName} — ${text.split('\n').length} líneas]\n\n${text}` };
+        }
+        return { type: 'binary', textSummary: `[Archivo binario adjunto: ${originalName}]` };
+    } catch (e) {
+        return { type: 'error', textSummary: `[Error leyendo ${originalName}: ${e.message}]` };
+    }
+}
+
+// ── POST /api/upload — subir archivo y procesar ────────────────────
+app.post('/api/upload', requireAuth, (req, res) => {
+    if (!upload) return res.status(501).json({ error: 'Módulo multer no instalado. Ejecuta: npm install multer' });
+    const uploader = upload.single('file');
+    uploader(req, res, async (err) => {
+        if (err) return res.status(400).json({ error: err.message });
+        if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+        try {
+            const { path: filePath, mimetype, originalname, size } = req.file;
+            const content = await extractFileContent(filePath, mimetype, originalname);
+
+            // Si es imagen, generar thumbnail si sharp disponible
+            let thumbBase64 = null;
+            if (content.type === 'image' && sharp) {
+                try {
+                    const thumbBuf = await sharp(filePath).resize(400, 400, { fit: 'inside' }).jpeg({ quality: 80 }).toBuffer();
+                    thumbBase64 = thumbBuf.toString('base64');
+                } catch(e) {}
+            }
+
+            // Limpiar archivo temporal
+            fs.unlink(filePath).catch(() => {});
+
+            console.log(`📎 [upload] ${originalname} (${(size/1024).toFixed(1)}KB) → tipo: ${content.type}`);
+            res.json({
+                ok: true,
+                type: content.type,
+                name: originalname,
+                size,
+                mimeType: mimetype,
+                base64: content.base64 || null,
+                thumbBase64,
+                text: content.text || null,
+                textSummary: content.textSummary,
+                meta: content.meta || null,
+                pages: content.pages || null,
+                ext: content.ext || null
+            });
+        } catch (e) {
+            console.error('[upload]', e.message);
+            res.status(500).json({ error: `Error procesando archivo: ${e.message}` });
+        }
+    });
+});
+
+// ── POST /api/chat-with-file — chat enviando archivos ──────────────
+app.post('/api/chat-with-file', requireAuth, async (req, res) => {
+    if (!checkRateLimit(req, res, 60, 60000)) return;
+    const { message, conversationId, history, fileData } = req.body;
+
+    const userId = req.user.id;
+    const { ObjectId } = require('mongodb');
+    const user = db ? await db.collection('users').findOne({ _id: new ObjectId(userId) }) : null;
+    const planStatus = user ? await getPlanStatus(user) : { plan: 'free' };
+
+    if (planStatus.plan !== 'premium') {
+        const msgsToday = await getMessagesToday(userId);
+        if (msgsToday >= FREE_MSG_PER_DAY) {
+            return res.status(402).json({
+                error: 'limit_reached',
+                message: `Límite de ${FREE_MSG_PER_DAY} mensajes diarios alcanzado. Actualiza a Premium.`
+            });
+        }
+    }
+
+    const userEmail = user?.email || req.user.email || '';
+    const isCreator = isCreatorAccount(userEmail);
+    const isVip     = user?.isVip || isVipAccount(userEmail);
+    const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
+    const activeBrain = useVipBrain ? brainVip : brainBase;
+
+    // Construir el mensaje enriquecido con el archivo
+    let enrichedMessage = message || '';
+    if (fileData) {
+        enrichedMessage = `${fileData.textSummary}\n\n${message || 'Analiza este archivo y responde.'}`;
+    }
+
+    const userContext = {
+        userId, email: userEmail,
+        username: user?.username || req.user.username || '',
+        displayName: user?.displayName || user?.username || '',
+        plan: planStatus.plan, isVip, isCreator,
+        hasFile: !!fileData,
+        fileType: fileData?.type || null,
+        fileName: fileData?.name || null
+    };
+
+    try {
+        const conversationHistory = Array.isArray(history) ? history.slice(-8) : [];
+        const convId = conversationId || `conv_${Date.now()}`;
+        const thought = await activeBrain.process(enrichedMessage, conversationHistory, null, userContext);
+        const responseText = thought.response || thought.message || 'Lo siento, no pude procesar el archivo.';
+
+        setTimeout(() => { activeBrain.learn(enrichedMessage, responseText, true, []).catch(() => {}); }, 100);
+
+        if (db) {
+            db.collection('messages').insertMany([
+                { conversationId: convId, userId, role: 'user', content: message || '[Archivo adjunto]', hasFile: !!fileData, fileName: fileData?.name, ts: new Date() },
+                { conversationId: convId, userId, role: 'assistant', content: responseText, ts: new Date() }
+            ]).catch(() => {});
+        }
+
+        res.json({ message: responseText, conversationId: convId, plan: planStatus.plan, ts: new Date().toISOString() });
+    } catch (e) {
+        console.error('[chat-with-file]', e.message);
+        res.status(500).json({ error: 'Error procesando archivo con el cerebro' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  GENERACIÓN DE ARCHIVOS (código, docs, etc.) — SIN LÍMITE
+// ══════════════════════════════════════════════════════════════════
+
+// POST /api/generate-file — genera archivo de cualquier tipo y tamaño
+app.post('/api/generate-file', requireAuth, async (req, res) => {
+    if (!checkRateLimit(req, res, 20, 60000)) return;
+    const { prompt, fileType, fileName, currentContent, operation } = req.body;
+    if (!prompt && !currentContent) return res.status(400).json({ error: 'Se requiere prompt o contenido' });
+
+    const userId = req.user.id;
+    const { ObjectId } = require('mongodb');
+    const user = db ? await db.collection('users').findOne({ _id: new ObjectId(userId) }) : null;
+    const planStatus = user ? await getPlanStatus(user) : { plan: 'free' };
+    const userEmail = user?.email || req.user.email || '';
+    const isCreator = isCreatorAccount(userEmail);
+    const isVip     = user?.isVip || isVipAccount(userEmail);
+    const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
+    const activeBrain = useVipBrain ? brainVip : brainBase;
+
+    // Operaciones: 'create' | 'edit' | 'analyze' | 'fix' | 'extend'
+    const op = operation || 'create';
+
+    let enrichedPrompt;
+    if (op === 'edit' && currentContent) {
+        enrichedPrompt = `OPERACIÓN: EDITAR ARCHIVO EXISTENTE
+ARCHIVO: ${fileName || 'archivo'}
+TIPO: ${fileType || 'texto'}
+INSTRUCCIÓN: ${prompt}
+
+CONTENIDO ACTUAL DEL ARCHIVO (${currentContent.split('\n').length} líneas):
+\`\`\`
+${currentContent}
+\`\`\`
+
+IMPORTANTE: Devuelve SOLO el archivo completo con las modificaciones aplicadas. No omitas ninguna línea. El archivo debe estar íntegro y funcional.`;
+    } else if (op === 'analyze' && currentContent) {
+        enrichedPrompt = `ANALIZA este archivo (${fileName || 'archivo'}, ${currentContent.split('\n').length} líneas) y responde: ${prompt}\n\nCONTENIDO:\n\`\`\`\n${currentContent}\n\`\`\``;
+    } else if (op === 'fix' && currentContent) {
+        enrichedPrompt = `CORRIGE ERRORES en este archivo (${fileName || 'archivo'}):
+PROBLEMA REPORTADO: ${prompt}
+
+CONTENIDO ACTUAL (${currentContent.split('\n').length} líneas):
+\`\`\`
+${currentContent}
+\`\`\`
+
+Devuelve el archivo completo corregido sin omitir nada.`;
+    } else {
+        enrichedPrompt = `GENERA ARCHIVO: ${fileName || `archivo.${fileType || 'txt'}`}
+TIPO: ${fileType || 'texto'}
+REQUISITOS: ${prompt}
+
+Genera el contenido completo del archivo. No pongas explicaciones, solo el contenido.`;
+    }
+
+    try {
+        console.log(`📝 [generate-file] op:${op} tipo:${fileType} prompt:${prompt?.slice(0,60)}`);
+        const thought = await activeBrain.process(enrichedPrompt, [], null, {
+            userId, email: userEmail, isVip, isCreator,
+            plan: planStatus.plan,
+            fileGenerationMode: true,
+            unlimitedOutput: true
+        });
+
+        const content = thought.response || thought.message || '';
+
+        // Guardar en disco si es un archivo real (no solo análisis)
+        let savedFileName = null;
+        let downloadUrl   = null;
+        if (op !== 'analyze') {
+            const safeName = (fileName || `nexus_${Date.now()}.${fileType || 'txt'}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+            const outPath  = path.join(GENERATED_DIR, safeName);
+            // Extraer solo el código si viene envuelto en bloques markdown
+            let cleanContent = content;
+            const codeMatch = content.match(/```[\w]*\n?([\s\S]*?)```/);
+            if (codeMatch) cleanContent = codeMatch[1];
+            await fs.writeFile(outPath, cleanContent, 'utf-8');
+            savedFileName = safeName;
+            downloadUrl   = `/generated/${safeName}`;
+
+            // Auto-limpiar archivos viejos (> 1 hora)
+            setTimeout(async () => {
+                try {
+                    const files = await fs.readdir(GENERATED_DIR);
+                    const now   = Date.now();
+                    for (const f of files) {
+                        const fp = path.join(GENERATED_DIR, f);
+                        const st = await fs.stat(fp);
+                        if (now - st.mtimeMs > 60 * 60 * 1000) await fs.unlink(fp).catch(() => {});
+                    }
+                } catch(e) {}
+            }, 5000);
+        }
+
+        res.json({
+            ok: true, operation: op, fileType, fileName,
+            content, savedFileName, downloadUrl,
+            lines: content.split('\n').length,
+            chars: content.length,
+            ts: new Date().toISOString()
+        });
+    } catch (e) {
+        console.error('[generate-file]', e.message);
+        res.status(500).json({ error: `Error generando archivo: ${e.message}` });
+    }
+});
+
+// GET /api/generated/:filename — descargar archivo generado
+app.get('/api/generated/:filename', requireAuth, async (req, res) => {
+    const safeName = req.params.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = path.join(GENERATED_DIR, safeName);
+    try {
+        await fs.access(filePath);
+        res.download(filePath, safeName);
+    } catch (e) {
+        res.status(404).json({ error: 'Archivo no encontrado o expirado' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════
 //  INICIO
 // ══════════════════════════════════════════════════════════════════
 async function start() {
     await connectDB();
-    for (const d of ['models','data','logs','cache']) await fs.mkdir(path.join(__dirname, d), { recursive:true });
+    for (const d of ['models','data','logs','cache','uploads_tmp','generated']) await fs.mkdir(path.join(__dirname, d), { recursive:true });
 
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`
 ╔══════════════════════════════════════════════════════════════════╗
 ║                                                                  ║
-║   🧠  NEXUS v7.0 — Pagos Mensuales + Anti-Fraude + VIP          ║
+║   🧠  NEXUS v8.0 — Multimodal + CodeGen + Anti-Fraude + VIP     ║
 ║                                                                  ║
 ║   🌐  http://localhost:${PORT.toString().padEnd(47)}║
 ║   💳  PayPal $${PLAN_PRICE}/mes · Reset automático a medianoche        ║
 ║   🆓  Free: ${FREE_MSG_PER_DAY} msgs/día · 👑 VIP: ${VIP_ACCOUNTS.length} cuentas permanentes    ║
+║   📎  Upload: imágenes, PDF, DOCX, código (50MB max)            ║
+║   📝  CodeGen: genera archivos sin límite de tamaño             ║
 ║   🛡️   Anti-fraude: brute-force, IP flood, tx duplicada,         ║
 ║       payer blacklist, multi-account, fake tx pattern           ║
 ║                                                                  ║
