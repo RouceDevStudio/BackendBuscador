@@ -705,6 +705,7 @@
 .codegen-file-remove { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; }
 </style>
 
+<script>
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  AUTH STATE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1866,7 +1867,6 @@ function addMessageWithFile(content, role='ai', extras={}, fileData=null, fileDa
       const chips = [makeChip(fileData), fileData2 ? makeChip(fileData2) : ''].join('');
       const vsLabel = fileData2 ? `<span class="file-compare-badge">⚖️ COMPARAR</span>` : '';
       fileHtml = `<div class="msg-file-attach" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${chips}${vsLabel}</div>`;
-      if (false) {
     }
     wrap.innerHTML = `<div class="msg-header"><div class="msg-avatar" style="font-size:12px;font-weight:700;font-family:'Space Mono',monospace;background:var(--bg3);color:var(--text2)">${initial}</div><span class="msg-name">Tú</span><span class="msg-ts">${timeStr}</span></div>${fileHtml}<div class="msg-bubble">${renderMd(content)}</div>`;
   } else {
