@@ -3427,24 +3427,44 @@ class NexusBrain:
         ]) and not file_content
         is_analyze = any(kw in msg_lower for kw in [
             'analiza', 'explica', 'describe', 'qué hace', 'que hace', 'revisa',
-            'analyze', 'explain', 'what does', 'review', 'check'
+            'analyze', 'explain', 'what does', 'review', 'check',
+            'opinas', 'opinás', 'opinion', 'opina', 'piensas', 'pensás',
+            'qué es', 'que es', 'ves', 'encuentras', 'notas', 'dirías',
+            'evalúa', 'evalua', 'valora', 'comentas', 'qué te parece', 'que te parece',
         ])
+
+        # Extraer la pregunta real del usuario (sin el contenido del archivo si venía en el mensaje)
+        user_question = msg_lower  # preservar para keywords
+        # Si message incluye el archivo completo (legacy), extraer solo la pregunta al final
+        clean_question = message
+        if file_content and len(file_content) > 200:
+            snippet = file_content[:80]
+            if snippet in message:
+                # Tomar solo lo que va DESPUÉS del bloque de código
+                after = message[message.rfind(snippet) + len(snippet):]
+                after = after.split('\n\n')[-1].strip()
+                if after and len(after) < 800:
+                    clean_question = after
+        clean_question = clean_question[:600]  # cap: no desperdiciar tokens
 
         try:
             if is_analyze or (file_content and not is_modify and not is_create):
-                # Análisis del archivo
+                # Análisis del archivo — preview de 8000 chars (~2000 tokens)
                 preview = file_content[:8000] if len(file_content) > 8000 else file_content
                 msgs = [
                     {"role": "system", "content":
-                        "Eres un ingeniero de software experto. Analiza el código con detalle. "
-                        "Responde en español de forma clara y estructurada."},
+                        "Eres NEXUS, un ingeniero de software senior creado por Jhonatan Castro Galviz. "
+                        "Analiza el código con profundidad: arquitectura, patrones, puntos fuertes y mejoras. "
+                        "Responde en español de forma clara, directa y estructurada."},
                     {"role": "user", "content":
-                        f"Archivo: {file_name} ({total_lines} líneas)\n"
-                        f"Pregunta: {message}\n\nCÓDIGO:\n{preview}"}
+                        f"Archivo: `{file_name}` — {total_lines} líneas\n"
+                        f"Pregunta: {clean_question}\n\n"
+                        f"CÓDIGO (primeras {len(preview.splitlines())} líneas):\n```\n{preview}\n```"}
                 ]
                 response = self.llm.chat(msgs, temperature=0.3, max_tokens=4096)
                 if not response:
-                    response = f"No pude analizar el archivo '{file_name}' en este momento."
+                    # Fallback inteligente: análisis heurístico sin necesidad del LLM
+                    response = self._smart_file_analysis(file_name, file_content, clean_question)
 
             elif is_modify and file_content:
                 # Modificar archivo existente
@@ -3729,6 +3749,92 @@ class NexusBrain:
         return random.choice(choices)
 
     # ─── Feedback externo ─────────────────────────────────────────────
+
+    def _smart_file_analysis(self, file_name: str, file_content: str,
+                              user_question: str) -> str:
+        """
+        Análisis heurístico del archivo cuando el LLM no está disponible.
+        Usa AST, regex y estadísticas del código para dar un diagnóstico útil.
+        """
+        import ast as _ast
+        lines = file_content.split('\n')
+        n_lines = len(lines)
+        ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'txt'
+
+        non_blank = [l for l in lines if l.strip()]
+        comment_starters = ('#', '//', '/*', '*')
+        comment_lines = sum(1 for l in non_blank if l.strip().startswith(comment_starters))
+
+        funcs   = re.findall(r'^\s*(?:def |async def |function\s+\w+|func\s+\w+)\s*(\w+)', file_content, re.M)
+        classes = re.findall(r'^\s*class\s+(\w+)', file_content, re.M)
+        imports = re.findall(r'^\s*(?:import|from|require|#include)\s+(\S+)', file_content, re.M)
+
+        ast_info = ''
+        if ext == 'py':
+            try:
+                tree  = _ast.parse(file_content)
+                nodes = list(_ast.walk(tree))
+                n_calls  = sum(1 for n in nodes if isinstance(n, _ast.Call))
+                n_loops  = sum(1 for n in nodes if isinstance(n, (_ast.For, _ast.While)))
+                n_try    = sum(1 for n in nodes if isinstance(n, _ast.Try))
+                n_deco   = sum(len(getattr(n, 'decorator_list', [])) for n in nodes)
+                has_async = bool(re.search(r'async def', file_content))
+                has_types = bool(re.search(r':\s*(str|int|float|bool|list|dict|Optional|Union)', file_content))
+                has_docs  = bool(re.search(r'"""[\s\S]*?"""', file_content))
+                ast_info = (
+                    '\n**Análisis AST:**\n'
+                    f'  - Llamadas: {n_calls}  |  Bucles: {n_loops}  |  try/except: {n_try}\n'
+                    f'  - Decoradores: {n_deco}  |  async: {"sí" if has_async else "no"}'
+                    f'  |  type hints: {"sí" if has_types else "no"}  |  docstrings: {"sí" if has_docs else "no"}\n'
+                )
+            except SyntaxError as se:
+                ast_info = f'\n⚠️ **Error de sintaxis** en línea {se.lineno}: `{se.msg}`'
+            except Exception:
+                pass
+
+        warnings = []
+        if 'import *' in file_content:
+            warnings.append('`import *` — evitar wildcard imports')
+        if re.search(r'except\s*:', file_content):
+            warnings.append('`except:` sin tipo — demasiado amplio')
+        if re.search(r'eval\s*\(', file_content):
+            warnings.append('`eval()` detectado')
+        if re.search(r'TODO|FIXME|HACK', file_content):
+            warnings.append('Comentarios `TODO/FIXME/HACK` pendientes')
+        if ext == 'py' and re.search(r'print\s*\(', file_content):
+            warnings.append('`print()` en producción — considerar `logging`')
+
+        strengths = []
+        if comment_lines / max(len(non_blank), 1) > 0.10:
+            strengths.append('Buen ratio de comentarios')
+        if classes:
+            strengths.append(f'Organizado en {len(classes)} clase(s)')
+        if re.search(r'try|except|catch', file_content):
+            strengths.append('Manejo de errores presente')
+        if len(funcs) > 5:
+            strengths.append(f'Modularizado: {len(funcs)} funciones')
+        if re.search(r'"""[\s\S]*?"""', file_content):
+            strengths.append('Documentación con docstrings')
+
+        warn_txt = '\n'.join(f'  - ⚠️ {w}' for w in warnings) if warnings else '  - Ninguno ✅'
+        str_txt  = '\n'.join(f'  - ✅ {s}' for s in strengths) if strengths else '  - N/A'
+        funcs_p  = ', '.join(f'`{f}`' for f in funcs[:8]) if funcs else 'ninguna'
+        cls_p    = ', '.join(f'`{c}`' for c in classes[:5]) if classes else 'ninguna'
+        pct_cmt  = comment_lines * 100 // max(len(non_blank), 1)
+
+        return (
+            f'## 📊 Análisis de `{file_name}`\n'
+            f'*(Análisis heurístico — LLM no disponible)*\n\n'
+            f'**Estadísticas:**\n'
+            f'  - Lenguaje: `{ext.upper()}` · Líneas: {n_lines} ({len(non_blank)} con código)\n'
+            f'  - Funciones: {len(funcs)} → {funcs_p}\n'
+            f'  - Clases: {len(classes)} → {cls_p}\n'
+            f'  - Imports: {len(imports)} · Comentarios: {pct_cmt}%\n'
+            f'{ast_info}\n'
+            f'**Puntos fuertes:**\n{str_txt}\n\n'
+            f'**Anti-patterns:**\n{warn_txt}\n\n'
+            f'*Reintentá en unos segundos para análisis con IA completo.*'
+        )
 
     def train_from_feedback(self, query: str, result: dict, helpful: bool):
         try:
