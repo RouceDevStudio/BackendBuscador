@@ -29,31 +29,6 @@
   </div>
 </div>
 
-<!-- ═══ PRELOADER ═══ -->
-<div id="preloader">
-  <div class="pre-neural">
-    <div class="pre-neural-line"></div><div class="pre-neural-line"></div>
-    <div class="pre-neural-line"></div><div class="pre-neural-line"></div>
-  </div>
-  <div class="pre-corner tl"></div><div class="pre-corner tr"></div>
-  <div class="pre-corner bl"></div><div class="pre-corner br"></div>
-  <div style="position:relative;z-index:2;display:flex;align-items:flex-end;">
-    <div class="pre-letters">
-      <span class="pre-letter" data-l="N">N</span>
-      <span class="pre-letter" data-l="E">E</span>
-      <span class="pre-letter" data-l="X">X</span>
-      <span class="pre-letter" data-l="U">U</span>
-      <span class="pre-letter" data-l="S">S</span>
-    </div>
-    <div class="pre-ia">
-      <span class="pre-ia-letter">I</span>
-      <span class="pre-ia-letter">A</span>
-    </div>
-  </div>
-  <div class="pre-tagline">Neural Intelligence System</div>
-  <div class="pre-bar-wrap"><div class="pre-bar"></div></div>
-</div>
-
 <!-- ═══ AUTH SCREEN ═══ -->
 <div class="auth-screen" id="auth-screen">
   <div class="auth-card">
@@ -159,9 +134,9 @@
     <div class="messages" id="messages">
       <div class="welcome" id="welcome-screen">
         <div class="welcome-glyph">
-          <svg viewBox="0 0 80 80" fill="none" width="56" height="56"><line x1="40" y1="7" x2="40" y2="73" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/><line x1="7" y1="40" x2="73" y2="40" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/><line x1="16" y1="16" x2="64" y2="64" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/><line x1="64" y1="16" x2="16" y2="64" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 80 80" fill="none" width="52" height="52"><line x1="40" y1="6" x2="40" y2="74" stroke="#a855f7" stroke-width="8" stroke-linecap="round"/><line x1="6" y1="40" x2="74" y2="40" stroke="#a855f7" stroke-width="8" stroke-linecap="round"/><line x1="15" y1="15" x2="65" y2="65" stroke="#a855f7" stroke-width="8" stroke-linecap="round"/><line x1="65" y1="15" x2="15" y2="65" stroke="#a855f7" stroke-width="8" stroke-linecap="round"/></svg>
         </div>
-        <h2>¿En qué puedo ayudarte hoy?</h2>
+        <h2>¿En qué puedo ayudarte?</h2>
         <p>Inteligencia artificial con redes neuronales propias y memoria episódica. Aprendo de cada conversación.</p>
         <div class="suggestions">
           <button class="sug" onclick="sendMessage('Hola! ¿Cómo estás hoy?')"><span class="sug-icon">👋</span><span>Salúdame</span><span class="sug-text">Empieza a chatear</span></button>
@@ -729,54 +704,6 @@
 .codegen-file-loaded-size { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
 .codegen-file-remove { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; }
 </style>
-
-<script>
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  PRELOADER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-(function() {
-  const preloader = document.getElementById('preloader');
-  if (!preloader) return;
-  const letters = document.querySelectorAll('.pre-letter');
-  for (let i = 0; i < 18; i++) {
-    const p = document.createElement('div');
-    p.className = 'pre-particle';
-    const x=Math.random()*100, y=Math.random()*100;
-    const tx=(Math.random()-.5)*300, ty=(Math.random()-.5)*300;
-    const dur=1.5+Math.random()*2, delay=Math.random()*1.5;
-    p.style.cssText=`left:${x}%;top:${y}%;--tx:${tx}px;--ty:${ty}px;animation-duration:${dur}s;animation-delay:${delay}s;`;
-    preloader.appendChild(p);
-  }
-  letters.forEach((letter, i) => {
-    setTimeout(() => { letter.style.animation='none'; letter.offsetHeight; letter.classList.add('compress'); }, 700 + i * 80);
-  });
-  const _startTime = performance.now();
-  function _hidePreloader() {
-    const elapsed = performance.now() - _startTime;
-    const minDelay = 1600;
-    const wait = Math.max(0, minDelay - elapsed);
-    setTimeout(() => {
-      preloader.classList.add('hide');
-      let removed = false;
-      preloader.addEventListener('transitionend', function onEnd() {
-        if (removed) return;
-        removed = true;
-        preloader.removeEventListener('transitionend', onEnd);
-        preloader.style.display = 'none';
-        preloader.remove();
-      }, { once: true });
-      setTimeout(() => {
-        if (!removed) { removed = true; preloader.style.display = 'none'; preloader.remove(); }
-      }, 700);
-    }, wait);
-  }
-  if (document.readyState === 'complete') {
-    _hidePreloader();
-  } else {
-    window.addEventListener('load', _hidePreloader, { once: true });
-    setTimeout(() => { if (preloader && preloader.parentNode) _hidePreloader(); }, 3500);
-  }
-})();
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  AUTH STATE
@@ -1734,8 +1661,8 @@ document.getElementById('new-btn').addEventListener('click',()=>{
   conversationId=null; hActiveId=null; hMsgs=[];
   const msgs=document.getElementById('messages');
   msgs.innerHTML=`<div class="welcome" id="welcome-screen">
-    <div class="welcome-glyph"><svg viewBox="0 0 80 80" fill="none" width="56" height="56"><line x1="40" y1="7" x2="40" y2="73" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/><line x1="7" y1="40" x2="73" y2="40" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/><line x1="16" y1="16" x2="64" y2="64" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/><line x1="64" y1="16" x2="16" y2="64" stroke="#C084FC" stroke-width="7.5" stroke-linecap="round"/></svg></div>
-    <h2>¿En qué puedo ayudarte hoy?</h2>
+    <div class="welcome-glyph"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26A7 7 0 0 0 19 9c0-3.87-3.13-7-7-7zm1 15h-2v-1h2v1zm.87-3.87c-.31.19-.87.5-.87 1.87h-2c0-2 1.05-2.59 1.57-2.9.56-.34 1.43-.87.43-1.6-.46-.32-.87-.37-1.22-.35-.66.04-1.28.58-1.56 1.35l-1.84-.76C8.87 8.74 10.35 7.1 12.07 7c.67-.04 1.64.06 2.56.71C16.23 8.75 16 10.38 14.04 11.5c-.2.11-.92.54-1.17.63z"/></svg></div>
+    <h2>¿En qué puedo ayudarte?</h2>
     <p>Inteligencia artificial con redes neuronales propias y memoria episódica.</p>
     <div class="suggestions">
       <button class="sug" onclick="sendMessage('Hola! ¿Cómo estás hoy?')"><span class="sug-icon">👋</span><span>Salúdame</span><span class="sug-text">Empieza a chatear</span></button>
