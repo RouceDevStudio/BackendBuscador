@@ -2873,9 +2873,19 @@ class NexusBrain:
             file_name = uctx.get('fileName', 'archivo')
             file_generation_mode = uctx.get('fileGenerationMode', False)
             file_content = uctx.get('fileContent', '')   # contenido completo del archivo
+            file_data2   = uctx.get('fileData2')         # segundo archivo para comparación (o None)
 
             is_code_file = has_file and file_type not in ('image',) and file_content
             is_gen_mode  = file_generation_mode
+
+            # Modo comparacion: dos archivos
+            if file_data2 and self.llm_available:
+                cmp_result = self._handle_file_comparison(
+                    message, file_content, file_name,
+                    file_data2, uctx, conversation_id, start_time
+                )
+                if cmp_result:
+                    return cmp_result
 
             if (is_code_file or is_gen_mode) and self.file_gen and self.llm_available:
                 file_result = self._handle_file_operation(
@@ -3400,6 +3410,174 @@ class NexusBrain:
 
     # ─── Mensaje Proactivo — NEXUS inicia la conversación ────────────────
 
+    def _handle_file_comparison(self, message: str,
+                                content_a: str, name_a: str,
+                                file_data2: dict,
+                                uctx: dict, conversation_id: str,
+                                start_time: float) -> dict:
+        """
+        Compara dos archivos (codigo, imagenes, docs) y determina cual es mejor.
+        Usa el LLM para un analisis profundo en todas las dimensiones relevantes.
+        Soporta: codigo vs codigo, imagen vs imagen, doc vs doc, codigo vs imagen (mixto).
+        """
+        content_b = file_data2.get('content', '')
+        name_b    = file_data2.get('name', 'archivo_2')
+        type_b    = file_data2.get('type', 'code')
+        base64_b  = file_data2.get('base64')
+        mime_b    = file_data2.get('mimeType', 'image/jpeg')
+
+        type_a = uctx.get('fileType', 'code')
+        base64_a = uctx.get('image_base64')
+        mime_a   = uctx.get('image_mimeType', 'image/jpeg')
+
+        both_images = (type_a == 'image' and type_b == 'image')
+        both_code   = (type_a not in ('image',) and type_b not in ('image',))
+        mixed       = not both_images and not both_code
+
+        print(f"[Comparison] {name_a} vs {name_b} | both_images={both_images} both_code={both_code}",
+              file=sys.stderr, flush=True)
+
+        if not self.llm_available:
+            return None
+
+        # ── Sistema de comparacion segun tipo ────────────────────────────
+        if both_images:
+            response = self._compare_images(message, name_a, name_b, base64_a, mime_a, base64_b, mime_b)
+        elif both_code:
+            response = self._compare_code(message, name_a, content_a, name_b, content_b)
+        else:
+            response = self._compare_mixed(message, name_a, content_a, type_a,
+                                           name_b, content_b, type_b)
+
+        if not response:
+            ext_a = name_a.rsplit('.', 1)[-1].upper() if '.' in name_a else '?'
+            ext_b = name_b.rsplit('.', 1)[-1].upper() if '.' in name_b else '?'
+            response = (
+                f"No pude comparar `{name_a}` vs `{name_b}` en este momento.\n"
+                f"Tipos detectados: {ext_a} / {ext_b}. Reintenta en unos segundos."
+            )
+
+        stats = self._activity_report()
+        return {
+            'response':      response,
+            'message':       response,
+            'file_content':  None,
+            'file_name':     None,
+            'file_lines':    0,
+            'comparison':    True,
+            'file_a':        name_a,
+            'file_b':        name_b,
+            'neural_activity': stats,
+            'processing_time': time.time() - start_time,
+        }
+
+    def _compare_code(self, question: str, name_a: str, content_a: str,
+                      name_b: str, content_b: str) -> str:
+        """Comparacion profunda entre dos archivos de codigo."""
+        ext_a = name_a.rsplit('.', 1)[-1] if '.' in name_a else 'txt'
+        ext_b = name_b.rsplit('.', 1)[-1] if '.' in name_b else 'txt'
+
+        # Preview de cada archivo (4000 chars c/u para no superar contexto)
+        prev_a = content_a[:4000] if content_a else '(vacío)'
+        prev_b = content_b[:4000] if content_b else '(vacío)'
+        lines_a = len(content_a.split('\n')) if content_a else 0
+        lines_b = len(content_b.split('\n')) if content_b else 0
+
+        system = (
+            "Eres NEXUS, un ingeniero de software senior creado por Jhonatan Castro Galviz. "
+            "Tu tarea: comparar dos archivos de código en TODOS los aspectos relevantes "
+            "y dar un veredicto claro y fundamentado. "
+            "Estructura tu respuesta con estas secciones:\n"
+            "1. RESUMEN EJECUTIVO (1 párrafo — cuál es mejor y por qué en general)\n"
+            "2. TABLA COMPARATIVA (usa markdown, compara: arquitectura, legibilidad, "
+            "mantenibilidad, performance, seguridad, buenas prácticas, documentación, "
+            "manejo de errores, modularidad — puntúa de 1-10 cada uno)\n"
+            "3. VENTAJAS DE CADA UNO (2 columnas)\n"
+            "4. DEBILIDADES DE CADA UNO\n"
+            "5. VEREDICTO FINAL (cuál usar, en qué contexto, sugerencias de mejora)\n"
+            "Sé directo, técnico y honesto. No seas diplomático si uno es claramente superior."
+        )
+
+        user = (
+            f"PREGUNTA DEL USUARIO: {question}\n\n"
+            f"ARCHIVO A: `{name_a}` ({lines_a} líneas, tipo: {ext_a.upper()})\n"
+            f"```{ext_a}\n{prev_a}\n```\n\n"
+            f"ARCHIVO B: `{name_b}` ({lines_b} líneas, tipo: {ext_b.upper()})\n"
+            f"```{ext_b}\n{prev_b}\n```"
+        )
+
+        msgs = [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user}
+        ]
+        return self.llm.chat(msgs, temperature=0.3, max_tokens=4096)
+
+    def _compare_images(self, question: str, name_a: str, name_b: str,
+                        base64_a: str, mime_a: str,
+                        base64_b: str, mime_b: str) -> str:
+        """Comparacion de dos imagenes via LLM con vision."""
+        if not (base64_a and base64_b):
+            return (
+                f"Para comparar imágenes necesito que ambas lleguen en base64.\n"
+                f"Recibí: A={'sí' if base64_a else 'no'} / B={'sí' if base64_b else 'no'}"
+            )
+
+        prompt = (
+            f"{question}\n\n"
+            f"Compara estas dos imágenes (`{name_a}` vs `{name_b}`) en todos los aspectos relevantes:\n"
+            "- Composición y encuadre\n"
+            "- Calidad técnica (nitidez, exposición, color)\n"
+            "- Contenido y comunicación visual\n"
+            "- Estética y diseño\n"
+            "- Uso previsto (¿para qué sirve mejor cada una?)\n\n"
+            "Da un veredicto claro: cuál es mejor y por qué."
+        )
+        msgs = [
+            {"role": "user", "content": [
+                {"type": "text",  "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_a};base64,{base64_a}"}},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_b};base64,{base64_b}"}},
+            ]}
+        ]
+        try:
+            result = self.llm.chat(msgs, temperature=0.3, max_tokens=2048)
+            if result:
+                return result
+        except Exception as e:
+            print(f"[Comparison] Vision error: {e}", file=sys.stderr, flush=True)
+
+        # Fallback: comparacion textual sin vision
+        system = (
+            "Eres NEXUS, experto en análisis visual. Se te piden comparar dos imágenes "
+            f"llamadas '{name_a}' y '{name_b}'. No puedes verlas directamente, "
+            "pero analiza basándote en sus nombres y el contexto de la pregunta."
+        )
+        msgs2 = [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": f"El usuario pregunta: {question}\n\n"
+             f"Imagen A: {name_a}\nImagen B: {name_b}\n\n"
+             "Basándote en los nombres de archivo y el contexto, da tu mejor análisis comparativo."}
+        ]
+        return self.llm.chat(msgs2, temperature=0.4, max_tokens=1024)
+
+    def _compare_mixed(self, question: str, name_a: str, content_a: str, type_a: str,
+                       name_b: str, content_b: str, type_b: str) -> str:
+        """Comparacion entre archivos de tipos diferentes (ej. imagen vs codigo)."""
+        system = (
+            "Eres NEXUS, analista técnico. Se te piden comparar dos archivos de tipos diferentes. "
+            "Compara lo que puedas de forma útil para el usuario."
+        )
+        user = (
+            f"Comparar: `{name_a}` (tipo: {type_a}) vs `{name_b}` (tipo: {type_b})\n"
+            f"Pregunta: {question}\n\n"
+            f"{'Contenido de ' + name_a + ':' + chr(10) + content_a[:2000] if content_a else ''}\n"
+            f"{'Contenido de ' + name_b + ':' + chr(10) + content_b[:2000] if content_b else ''}"
+        )
+        return self.llm.chat(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            temperature=0.4, max_tokens=2048
+        )
+
     def _handle_file_operation(self, message: str, file_content: str, file_name: str,
                                 uctx: dict, conversation_id: str, start_time: float) -> dict:
         """
@@ -3427,44 +3605,24 @@ class NexusBrain:
         ]) and not file_content
         is_analyze = any(kw in msg_lower for kw in [
             'analiza', 'explica', 'describe', 'qué hace', 'que hace', 'revisa',
-            'analyze', 'explain', 'what does', 'review', 'check',
-            'opinas', 'opinás', 'opinion', 'opina', 'piensas', 'pensás',
-            'qué es', 'que es', 'ves', 'encuentras', 'notas', 'dirías',
-            'evalúa', 'evalua', 'valora', 'comentas', 'qué te parece', 'que te parece',
+            'analyze', 'explain', 'what does', 'review', 'check'
         ])
-
-        # Extraer la pregunta real del usuario (sin el contenido del archivo si venía en el mensaje)
-        user_question = msg_lower  # preservar para keywords
-        # Si message incluye el archivo completo (legacy), extraer solo la pregunta al final
-        clean_question = message
-        if file_content and len(file_content) > 200:
-            snippet = file_content[:80]
-            if snippet in message:
-                # Tomar solo lo que va DESPUÉS del bloque de código
-                after = message[message.rfind(snippet) + len(snippet):]
-                after = after.split('\n\n')[-1].strip()
-                if after and len(after) < 800:
-                    clean_question = after
-        clean_question = clean_question[:600]  # cap: no desperdiciar tokens
 
         try:
             if is_analyze or (file_content and not is_modify and not is_create):
-                # Análisis del archivo — preview de 8000 chars (~2000 tokens)
+                # Análisis del archivo
                 preview = file_content[:8000] if len(file_content) > 8000 else file_content
                 msgs = [
                     {"role": "system", "content":
-                        "Eres NEXUS, un ingeniero de software senior creado por Jhonatan Castro Galviz. "
-                        "Analiza el código con profundidad: arquitectura, patrones, puntos fuertes y mejoras. "
-                        "Responde en español de forma clara, directa y estructurada."},
+                        "Eres un ingeniero de software experto. Analiza el código con detalle. "
+                        "Responde en español de forma clara y estructurada."},
                     {"role": "user", "content":
-                        f"Archivo: `{file_name}` — {total_lines} líneas\n"
-                        f"Pregunta: {clean_question}\n\n"
-                        f"CÓDIGO (primeras {len(preview.splitlines())} líneas):\n```\n{preview}\n```"}
+                        f"Archivo: {file_name} ({total_lines} líneas)\n"
+                        f"Pregunta: {message}\n\nCÓDIGO:\n{preview}"}
                 ]
                 response = self.llm.chat(msgs, temperature=0.3, max_tokens=4096)
                 if not response:
-                    # Fallback inteligente: análisis heurístico sin necesidad del LLM
-                    response = self._smart_file_analysis(file_name, file_content, clean_question)
+                    response = f"No pude analizar el archivo '{file_name}' en este momento."
 
             elif is_modify and file_content:
                 # Modificar archivo existente
@@ -3749,92 +3907,6 @@ class NexusBrain:
         return random.choice(choices)
 
     # ─── Feedback externo ─────────────────────────────────────────────
-
-    def _smart_file_analysis(self, file_name: str, file_content: str,
-                              user_question: str) -> str:
-        """
-        Análisis heurístico del archivo cuando el LLM no está disponible.
-        Usa AST, regex y estadísticas del código para dar un diagnóstico útil.
-        """
-        import ast as _ast
-        lines = file_content.split('\n')
-        n_lines = len(lines)
-        ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'txt'
-
-        non_blank = [l for l in lines if l.strip()]
-        comment_starters = ('#', '//', '/*', '*')
-        comment_lines = sum(1 for l in non_blank if l.strip().startswith(comment_starters))
-
-        funcs   = re.findall(r'^\s*(?:def |async def |function\s+\w+|func\s+\w+)\s*(\w+)', file_content, re.M)
-        classes = re.findall(r'^\s*class\s+(\w+)', file_content, re.M)
-        imports = re.findall(r'^\s*(?:import|from|require|#include)\s+(\S+)', file_content, re.M)
-
-        ast_info = ''
-        if ext == 'py':
-            try:
-                tree  = _ast.parse(file_content)
-                nodes = list(_ast.walk(tree))
-                n_calls  = sum(1 for n in nodes if isinstance(n, _ast.Call))
-                n_loops  = sum(1 for n in nodes if isinstance(n, (_ast.For, _ast.While)))
-                n_try    = sum(1 for n in nodes if isinstance(n, _ast.Try))
-                n_deco   = sum(len(getattr(n, 'decorator_list', [])) for n in nodes)
-                has_async = bool(re.search(r'async def', file_content))
-                has_types = bool(re.search(r':\s*(str|int|float|bool|list|dict|Optional|Union)', file_content))
-                has_docs  = bool(re.search(r'"""[\s\S]*?"""', file_content))
-                ast_info = (
-                    '\n**Análisis AST:**\n'
-                    f'  - Llamadas: {n_calls}  |  Bucles: {n_loops}  |  try/except: {n_try}\n'
-                    f'  - Decoradores: {n_deco}  |  async: {"sí" if has_async else "no"}'
-                    f'  |  type hints: {"sí" if has_types else "no"}  |  docstrings: {"sí" if has_docs else "no"}\n'
-                )
-            except SyntaxError as se:
-                ast_info = f'\n⚠️ **Error de sintaxis** en línea {se.lineno}: `{se.msg}`'
-            except Exception:
-                pass
-
-        warnings = []
-        if 'import *' in file_content:
-            warnings.append('`import *` — evitar wildcard imports')
-        if re.search(r'except\s*:', file_content):
-            warnings.append('`except:` sin tipo — demasiado amplio')
-        if re.search(r'eval\s*\(', file_content):
-            warnings.append('`eval()` detectado')
-        if re.search(r'TODO|FIXME|HACK', file_content):
-            warnings.append('Comentarios `TODO/FIXME/HACK` pendientes')
-        if ext == 'py' and re.search(r'print\s*\(', file_content):
-            warnings.append('`print()` en producción — considerar `logging`')
-
-        strengths = []
-        if comment_lines / max(len(non_blank), 1) > 0.10:
-            strengths.append('Buen ratio de comentarios')
-        if classes:
-            strengths.append(f'Organizado en {len(classes)} clase(s)')
-        if re.search(r'try|except|catch', file_content):
-            strengths.append('Manejo de errores presente')
-        if len(funcs) > 5:
-            strengths.append(f'Modularizado: {len(funcs)} funciones')
-        if re.search(r'"""[\s\S]*?"""', file_content):
-            strengths.append('Documentación con docstrings')
-
-        warn_txt = '\n'.join(f'  - ⚠️ {w}' for w in warnings) if warnings else '  - Ninguno ✅'
-        str_txt  = '\n'.join(f'  - ✅ {s}' for s in strengths) if strengths else '  - N/A'
-        funcs_p  = ', '.join(f'`{f}`' for f in funcs[:8]) if funcs else 'ninguna'
-        cls_p    = ', '.join(f'`{c}`' for c in classes[:5]) if classes else 'ninguna'
-        pct_cmt  = comment_lines * 100 // max(len(non_blank), 1)
-
-        return (
-            f'## 📊 Análisis de `{file_name}`\n'
-            f'*(Análisis heurístico — LLM no disponible)*\n\n'
-            f'**Estadísticas:**\n'
-            f'  - Lenguaje: `{ext.upper()}` · Líneas: {n_lines} ({len(non_blank)} con código)\n'
-            f'  - Funciones: {len(funcs)} → {funcs_p}\n'
-            f'  - Clases: {len(classes)} → {cls_p}\n'
-            f'  - Imports: {len(imports)} · Comentarios: {pct_cmt}%\n'
-            f'{ast_info}\n'
-            f'**Puntos fuertes:**\n{str_txt}\n\n'
-            f'**Anti-patterns:**\n{warn_txt}\n\n'
-            f'*Reintentá en unos segundos para análisis con IA completo.*'
-        )
 
     def train_from_feedback(self, query: str, result: dict, helpful: bool):
         try:
