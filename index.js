@@ -1000,7 +1000,10 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
             // Para imágenes NO ponemos textSummary — el brain usa visión directamente
             enrichedMessage = message || 'Analiza esta imagen y describe todo lo que ves.';
         } else {
-            enrichedMessage = `${fileData.textSummary || ''}\n\n${message || 'Analiza este archivo y responde.'}`;
+            // NO incluir textSummary aquí — el archivo completo ya viaja en uctx.fileContent.
+            // Si se incluye en el mensaje también, el contenido llega duplicado (hasta 200KB × 2)
+            // lo que supera el límite de contexto de Groq y hace que el LLM retorne null.
+            enrichedMessage = message || 'Analiza este archivo y responde.';
         }
     }
 
