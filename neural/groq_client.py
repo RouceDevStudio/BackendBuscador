@@ -80,19 +80,28 @@ class GroqClient:
             self.available = False
             return False
     
-    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600) -> str:
+    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600,
+             model_override: str = None) -> str:
+        """
+        Envía mensajes al LLM.
+        - model_override: usa un modelo diferente para esta llamada (ej. modelo de visión)
+        - Soporta mensajes multimodales (content como lista con image_url para visión)
+        """
         if not self.available:
             return None
+        model_to_use = model_override or self.model
         payload = {
-            'model':       self.model,
+            'model':       model_to_use,
             'messages':    messages,
             'temperature': temperature,
             'max_tokens':  max_tokens
         }
+        # Timeout mayor para generación de archivos grandes
+        timeout = 300 if max_tokens > 4000 else 60
         try:
             req = urllib.request.Request(
                 f'{self.base_url}/chat/completions',
-                data=json.dumps(payload).encode('utf-8'),
+                data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
                 headers={
                     'Authorization':  f'Bearer {self.api_key}',
                     'Content-Type':   'application/json',
@@ -101,13 +110,17 @@ class GroqClient:
                     'Accept':         'application/json',
                 }
             )
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 data = json.loads(r.read().decode('utf-8'))
                 self._fail_count = 0   # reset en éxito
                 return data['choices'][0]['message']['content']
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
             print(f"[Groq] HTTP Error {e.code}: {error_body[:200]}", flush=True)
+            # No contar rate limits (429) como fallos del modelo
+            if e.code == 429:
+                print(f"[Groq] Rate limit — esperando...", flush=True)
+                return None
             self._fail_count += 1
             if self._fail_count >= self._MAX_FAILS:
                 print(f"[Groq] {self._MAX_FAILS} fallos consecutivos — marcando no disponible temporalmente", flush=True)
@@ -158,13 +171,15 @@ class OllamaClient:
             self.available = False
             return False
     
-    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600) -> str:
+    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600,
+             model_override: str = None) -> str:
         if not self.available:
             return None
         
-        prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+        model_to_use = model_override or self.model
+        prompt = "\n".join([f"{msg['role']}: {msg['content'] if isinstance(msg['content'], str) else str(msg['content'])}" for msg in messages])
         payload = {
-            'model':   self.model,
+            'model':   model_to_use,
             'prompt':  prompt,
             'stream':  False,
             'options': {
@@ -332,16 +347,24 @@ class UnifiedLLMClient:
                 result = getattr(client, method)(*args, **kwargs)
                 if result is not None:
                     return result
-                # result == None significa que falló en runtime
                 print(f"[LLM] {name} retornó None → probando siguiente...", flush=True)
+            except TypeError:
+                # El cliente no soporta algún kwarg (ej. model_override en Ollama) — intentar sin él
+                try:
+                    filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'model_override'}
+                    result = getattr(client, method)(*args, **filtered_kwargs)
+                    if result is not None:
+                        return result
+                except Exception as e2:
+                    print(f"[LLM] {name} error (retry sin kwargs extra): {e2}", flush=True)
             except Exception as e:
                 print(f"[LLM] {name} excepción inesperada: {e} → probando siguiente...", flush=True)
 
-        # Ninguno funcionó
         return None
 
-    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600) -> str:
-        return self._try_in_order('chat', messages, temperature, max_tokens)
+    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600,
+             model_override: str = None) -> str:
+        return self._try_in_order('chat', messages, temperature, max_tokens, model_override=model_override)
     
     def generate(self, prompt: str, temperature: float = 0.3) -> str:
         return self._try_in_order('generate', prompt, temperature)

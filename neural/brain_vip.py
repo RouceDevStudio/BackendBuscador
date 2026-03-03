@@ -62,6 +62,12 @@ from network import NeuralNet
 from embeddings import EmbeddingMatrix, EMBED_DIM
 from memory import WorkingMemory, EpisodicMemory, SemanticMemory
 from dynamic_params import DynamicNeuralNet, DynamicParameterSystem, InfiniteEmbeddings
+try:
+    from code_verifier import CodeVerifier as _CodeVerifier
+    _CODE_VERIFIER_AVAILABLE = True
+except Exception as _e:
+    _CODE_VERIFIER_AVAILABLE = False
+    print(f"⚠️ CodeVerifier no disponible: {_e}", file=sys.stderr, flush=True)
 
 # ─── LLM ───────────────────────────────────────────────────────────
 try:
@@ -318,6 +324,412 @@ class ConversationLearner:
 #  RESPONSE GENERATOR
 # ═══════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════
+#  IMAGEN — GENERACIÓN Y VISIÓN
+# ═══════════════════════════════════════════════════════════════════════
+
+_IMAGE_GEN_KEYWORDS = [
+    'genera una imagen', 'genera imagen', 'crea una imagen', 'crea imagen',
+    'dibuja', 'ilustra', 'hazme una imagen', 'hazme un dibujo',
+    'generate an image', 'generate image', 'create an image', 'draw',
+    'make an image', 'make a picture', 'paint', 'diseña una imagen',
+    'imagina y dibuja', 'quiero una imagen de', 'quiero ver',
+    'muéstrame una imagen', 'pintame', 'pinta', 'renderiza',
+]
+
+_IMAGE_EDIT_KEYWORDS = [
+    'edita esta imagen', 'modifica esta imagen', 'cambia esta imagen',
+    'mejora esta imagen', 'edita la imagen', 'modifica la imagen',
+]
+
+def _is_image_gen_request(message: str) -> bool:
+    """Detecta si el usuario pide generar/crear una imagen."""
+    ml = message.lower()
+    return any(kw in ml for kw in _IMAGE_GEN_KEYWORDS)
+
+def _build_pollinations_url(prompt: str, width: int = 1024, height: int = 1024,
+                             seed: int = None, model: str = 'flux') -> str:
+    """
+    Construye URL de Pollinations.ai para generación de imágenes.
+    Completamente gratis, sin API key.
+    Modelos: flux (mejor calidad), turbo (más rápido), flux-realism
+    """
+    import urllib.parse
+    encoded = urllib.parse.quote(prompt, safe='')
+    s = seed if seed is not None else random.randint(1, 999999)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&seed={s}&model={model}&nologo=true&enhance=true"
+    return url
+
+def _extract_image_prompt(message: str) -> str:
+    """Extrae el prompt de imagen del mensaje del usuario."""
+    ml = message.lower()
+    # Remover el keyword de generación y dejar solo el prompt
+    for kw in sorted(_IMAGE_GEN_KEYWORDS, key=len, reverse=True):
+        if kw in ml:
+            idx = ml.find(kw)
+            after = message[idx + len(kw):].strip()
+            # Limpiar conectores
+            for connector in ['de ', 'un ', 'una ', 'el ', 'la ', ': ', '- ']:
+                if after.lower().startswith(connector):
+                    after = after[len(connector):]
+            return after.strip() or message.strip()
+    return message.strip()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  GENERACIÓN DE ARCHIVOS GRANDES — CHUNKED
+# ═══════════════════════════════════════════════════════════════════════
+
+class ChunkedFileGenerator:
+    """
+    Genera o modifica archivos de cualquier tamaño usando llamadas LLM encadenadas.
+    
+    Estrategia para archivos grandes (>500 líneas):
+    1. ANÁLISIS: El LLM analiza el archivo y decide qué cambiar → plan de cambios
+    2. CHUNKS: Divide el archivo en secciones de ~150 líneas con solapamiento
+    3. GENERACIÓN: Por cada chunk, el LLM genera la versión modificada
+    4. ENSAMBLAJE: Une todos los chunks en el archivo final completo
+    5. VERIFICACIÓN: El LLM revisa que el resultado sea coherente (si < 200 líneas)
+    
+    Para archivos nuevos:
+    1. DISEÑO: El LLM crea un esquema/estructura completa del archivo
+    2. SECCIONES: Genera cada sección por separado
+    3. ENSAMBLAJE: Une todo en el archivo final
+    """
+
+    CHUNK_SIZE     = 150   # líneas por chunk
+    OVERLAP        = 20    # líneas de solapamiento entre chunks
+    MAX_TOKENS_OUT = 8000  # tokens máximos de salida por llamada Groq
+
+    def __init__(self, llm_client):
+        self.llm = llm_client
+
+    def _llm_call(self, system: str, user: str, temperature: float = 0.3,
+                  max_tokens: int = 8000) -> str:
+        """Llamada directa al LLM con reintentos."""
+        messages = [
+            {"role": "system",  "content": system},
+            {"role": "user",    "content": user}
+        ]
+        for attempt in range(3):
+            try:
+                result = self.llm.chat(messages, temperature=temperature, max_tokens=max_tokens)
+                if result and result.strip():
+                    return result.strip()
+            except Exception as e:
+                print(f"[ChunkedGen] Intento {attempt+1} falló: {e}", file=sys.stderr, flush=True)
+                time.sleep(1)
+        return None
+
+    def _clean_code(self, text: str) -> str:
+        """Limpia bloques markdown del código."""
+        if not text:
+            return ''
+        # Remover ```language ... ``` wrappers
+        import re
+        text = re.sub(r'^```[\w\s]*\n?', '', text.strip(), flags=re.MULTILINE)
+        text = re.sub(r'\n?```\s*$', '', text.strip(), flags=re.MULTILINE)
+        return text.strip()
+
+    def _split_into_chunks(self, lines: list) -> list:
+        """Divide líneas en chunks con solapamiento."""
+        chunks = []
+        total  = len(lines)
+        start  = 0
+        while start < total:
+            end = min(start + self.CHUNK_SIZE, total)
+            chunks.append({
+                'start':     start,
+                'end':       end,
+                'lines':     lines[start:end],
+                'is_first':  start == 0,
+                'is_last':   end == total,
+            })
+            # Avanzar con solapamiento
+            start = end - self.OVERLAP if end < total else total
+        return chunks
+
+    def analyze_and_plan(self, original_content: str, instruction: str,
+                         filename: str = 'archivo') -> dict:
+        """
+        Analiza el archivo y crea un plan de cambios detallado.
+        Retorna: { plan_text, affected_sections, file_type, total_lines }
+        """
+        lines = original_content.split('\n')
+        total = len(lines)
+        # Muestra las primeras y últimas 100 líneas + estadísticas
+        preview_start = '\n'.join(lines[:100])
+        preview_end   = '\n'.join(lines[-100:]) if total > 200 else ''
+        ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'txt'
+
+        system = (
+            "Eres un ingeniero de software experto en análisis de código. "
+            "Tu tarea: analizar un archivo y crear un plan PRECISO de cambios. "
+            "Responde en JSON válido ÚNICAMENTE, sin explicaciones adicionales."
+        )
+        user = (
+            f"ARCHIVO: {filename} ({total} líneas, tipo: {ext})\n"
+            f"INSTRUCCIÓN: {instruction}\n\n"
+            f"PRIMERAS 100 LÍNEAS:\n```\n{preview_start}\n```\n"
+            + (f"\nÚLTIMAS 100 LÍNEAS:\n```\n{preview_end}\n```\n" if preview_end else '')
+            + "\n\nCrea un plan JSON con esta estructura EXACTA:\n"
+            "{\n"
+            '  "file_type": "nodejs|python|html|css|etc",\n'
+            '  "total_lines": ' + str(total) + ',\n'
+            '  "changes_summary": "descripción breve de todos los cambios",\n'
+            '  "affected_areas": ["área1", "área2"],\n'
+            '  "global_additions": "código que va al inicio (imports, etc.) si aplica",\n'
+            '  "global_replacements": [{"find": "texto exacto", "replace": "nuevo texto"}],\n'
+            '  "new_sections": [{"after_line": 50, "code": "código nuevo"}],\n'
+            '  "delete_patterns": ["patrón a eliminar"],\n'
+            '  "needs_full_rewrite": false\n'
+            "}"
+        )
+        result = self._llm_call(system, user, temperature=0.2, max_tokens=2000)
+        if not result:
+            return {'plan_text': instruction, 'total_lines': total, 'file_type': ext,
+                    'needs_full_rewrite': False}
+        try:
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if json_match:
+                plan = json.loads(json_match.group())
+                plan['total_lines'] = total
+                return plan
+        except Exception:
+            pass
+        return {'plan_text': result, 'total_lines': total, 'file_type': ext,
+                'needs_full_rewrite': False}
+
+    def modify_file(self, original_content: str, instruction: str,
+                    filename: str = 'archivo') -> str:
+        """
+        Modifica un archivo existente aplicando la instrucción.
+        Soporta archivos de cualquier tamaño.
+        """
+        lines = original_content.split('\n')
+        total = len(lines)
+        print(f"[ChunkedGen] Modificando {filename} ({total} líneas)", file=sys.stderr, flush=True)
+
+        # Archivos pequeños: modificar en una sola llamada
+        if total <= 400:
+            return self._modify_small(original_content, instruction, filename)
+
+        # Archivos grandes: chunked approach
+        return self._modify_large(lines, instruction, filename, total)
+
+    def _modify_small(self, content: str, instruction: str, filename: str) -> str:
+        """Modifica archivo pequeño en una sola llamada LLM."""
+        ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'txt'
+        system = (
+            f"Eres un ingeniero de software experto en {ext}. "
+            f"REGLA CRÍTICA: Devuelve ÚNICAMENTE el archivo completo modificado. "
+            f"Sin explicaciones, sin markdown, sin comentarios extra. Solo el código."
+        )
+        user = (
+            f"ARCHIVO: {filename}\n"
+            f"INSTRUCCIÓN: {instruction}\n\n"
+            f"CONTENIDO ACTUAL:\n{content}\n\n"
+            f"Devuelve el archivo completo con los cambios aplicados. "
+            f"NO omitas ninguna línea. El archivo debe estar íntegro."
+        )
+        result = self._llm_call(system, user, temperature=0.2, max_tokens=self.MAX_TOKENS_OUT)
+        return self._clean_code(result) if result else content
+
+    def _modify_large(self, lines: list, instruction: str, filename: str, total: int) -> str:
+        """
+        Modifica archivo grande usando generación por chunks.
+        Cada chunk mantiene contexto del anterior y del siguiente.
+        """
+        ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'txt'
+        chunks = self._split_into_chunks(lines)
+        print(f"[ChunkedGen] {len(chunks)} chunks de ~{self.CHUNK_SIZE} líneas", file=sys.stderr, flush=True)
+
+        # Paso 1: Obtener plan de cambios
+        original_content = '\n'.join(lines)
+        plan = self.analyze_and_plan(original_content, instruction, filename)
+        plan_summary = plan.get('changes_summary', instruction)
+        print(f"[ChunkedGen] Plan: {plan_summary[:100]}", file=sys.stderr, flush=True)
+
+        result_chunks = []
+        prev_tail = ''  # últimas líneas del chunk anterior (para contexto)
+
+        for i, chunk in enumerate(chunks):
+            chunk_content = '\n'.join(chunk['lines'])
+            line_start    = chunk['start'] + 1  # 1-indexed para humanos
+            line_end      = chunk['end']
+
+            # Contexto: qué viene después
+            next_preview = ''
+            if not chunk['is_last'] and i + 1 < len(chunks):
+                next_lines = chunks[i+1]['lines'][:10]
+                next_preview = f"\n\nLAS SIGUIENTES {len(next_lines)} LÍNEAS (solo contexto, NO las modifiques):\n" + '\n'.join(next_lines)
+
+            system = (
+                f"Eres un ingeniero experto en {ext}. "
+                f"Estás modificando un archivo de {total} líneas llamado '{filename}'. "
+                f"INSTRUCCIÓN GLOBAL: {instruction}\n"
+                f"PLAN DE CAMBIOS: {plan_summary}\n\n"
+                f"REGLAS CRÍTICAS:\n"
+                f"1. Modifica SOLO la sección que se te da (líneas {line_start}-{line_end})\n"
+                f"2. Devuelve ÚNICAMENTE el código de esta sección modificado\n"
+                f"3. Sin explicaciones, sin markdown, sin delimitadores\n"
+                f"4. Mantén la coherencia con el contexto anterior\n"
+                f"5. Si esta sección NO necesita cambios, devuélvela EXACTAMENTE igual\n"
+                f"6. NO agregues código de otras secciones"
+            )
+            user = (
+                (f"CONTEXTO ANTERIOR (últimas líneas procesadas):\n{prev_tail}\n\n" if prev_tail else '')
+                + f"SECCIÓN ACTUAL (líneas {line_start}-{line_end} de {total}):\n{chunk_content}"
+                + next_preview
+                + f"\n\nDevuelve esta sección con los cambios aplicados:"
+            )
+
+            modified_chunk = self._llm_call(system, user, temperature=0.15,
+                                            max_tokens=self.MAX_TOKENS_OUT)
+            if modified_chunk:
+                cleaned = self._clean_code(modified_chunk)
+                result_chunks.append(cleaned)
+                # Guardar las últimas 20 líneas como contexto para el siguiente chunk
+                prev_tail_lines = cleaned.split('\n')
+                prev_tail = '\n'.join(prev_tail_lines[-20:])
+                print(f"[ChunkedGen] ✓ Chunk {i+1}/{len(chunks)} ({line_start}-{line_end})",
+                      file=sys.stderr, flush=True)
+            else:
+                # Si falla, usar el original
+                result_chunks.append(chunk_content)
+                print(f"[ChunkedGen] ⚠️ Chunk {i+1} falló → usando original",
+                      file=sys.stderr, flush=True)
+
+        # Ensamblar todos los chunks
+        # Quitar el solapamiento entre chunks para evitar duplicados
+        final_lines = []
+        for i, (chunk, modified) in enumerate(zip(chunks, result_chunks)):
+            mod_lines = modified.split('\n')
+            if i == 0:
+                final_lines.extend(mod_lines)
+            else:
+                # Saltar las líneas de solapamiento (que ya están en el chunk anterior)
+                skip = min(self.OVERLAP, len(mod_lines))
+                final_lines.extend(mod_lines[skip:])
+
+        result = '\n'.join(final_lines)
+        print(f"[ChunkedGen] ✅ Ensamblado: {len(result.split(chr(10)))} líneas", file=sys.stderr, flush=True)
+        return result
+
+    def create_file(self, prompt: str, filename: str = 'archivo', estimated_lines: int = 0) -> str:
+        """
+        Crea un archivo nuevo desde cero.
+        Para archivos grandes, genera sección por sección.
+        """
+        ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'txt'
+
+        # Archivos pequeños o sin estimación: generar directo
+        if estimated_lines <= 300:
+            system = (
+                f"Eres un ingeniero experto en {ext}. "
+                f"REGLA: Devuelve ÚNICAMENTE el contenido del archivo. "
+                f"Sin explicaciones, sin markdown. Solo el código completo y funcional."
+            )
+            user = (
+                f"Crea el archivo '{filename}'.\n"
+                f"REQUISITOS: {prompt}\n\n"
+                f"Genera el archivo completo, bien estructurado y funcional."
+            )
+            result = self._llm_call(system, user, temperature=0.3, max_tokens=self.MAX_TOKENS_OUT)
+            return self._clean_code(result) if result else f"// Error generando {filename}"
+
+        # Archivos grandes: generar por secciones
+        return self._create_large_file(prompt, filename, ext, estimated_lines)
+
+    def _create_large_file(self, prompt: str, filename: str, ext: str,
+                           estimated_lines: int) -> str:
+        """Crea archivo grande generando sección por sección."""
+        print(f"[ChunkedGen] Creando archivo grande: {filename} (~{estimated_lines} líneas)",
+              file=sys.stderr, flush=True)
+
+        # Paso 1: Diseño estructural
+        system_design = (
+            f"Eres un arquitecto de software experto en {ext}. "
+            f"Responde ÚNICAMENTE en JSON válido."
+        )
+        user_design = (
+            f"Diseña la estructura completa de '{filename}' ({estimated_lines} líneas aprox).\n"
+            f"REQUISITOS: {prompt}\n\n"
+            f"Responde con JSON:\n"
+            "{\n"
+            '  "sections": [\n'
+            '    {"name": "Imports y configuración", "description": "...", "approx_lines": 50},\n'
+            '    {"name": "Modelos/Schemas", "description": "...", "approx_lines": 100},\n'
+            '    ...\n'
+            '  ],\n'
+            '  "global_notes": "notas importantes de arquitectura"\n'
+            "}"
+        )
+        design_result = self._llm_call(system_design, user_design, temperature=0.3, max_tokens=2000)
+        sections = []
+        global_notes = ''
+        if design_result:
+            try:
+                import re
+                json_match = re.search(r'\{[\s\S]*\}', design_result)
+                if json_match:
+                    design = json.loads(json_match.group())
+                    sections     = design.get('sections', [])
+                    global_notes = design.get('global_notes', '')
+            except Exception:
+                pass
+
+        if not sections:
+            # Fallback: secciones genéricas
+            sections = [
+                {"name": f"Parte {i+1}", "description": prompt, "approx_lines": 200}
+                for i in range(max(1, estimated_lines // 200))
+            ]
+
+        print(f"[ChunkedGen] Estructura: {len(sections)} secciones", file=sys.stderr, flush=True)
+
+        # Paso 2: Generar cada sección
+        generated_sections = []
+        previous_code = ''
+
+        for i, section in enumerate(sections):
+            sec_name = section.get('name', f'Sección {i+1}')
+            sec_desc = section.get('description', prompt)
+            sec_lines = section.get('approx_lines', 200)
+
+            system = (
+                f"Eres un ingeniero experto en {ext}. "
+                f"Estás generando '{filename}' sección por sección.\n"
+                f"REQUISITOS GLOBALES: {prompt}\n"
+                + (f"NOTAS DE ARQUITECTURA: {global_notes}\n" if global_notes else '')
+                + f"REGLAS: Devuelve ÚNICAMENTE el código de esta sección. Sin markdown."
+            )
+            user = (
+                (f"CÓDIGO YA GENERADO (contexto, NO repetir):\n...{previous_code[-500:]}\n\n" if previous_code else '')
+                + f"SECCIÓN {i+1}/{len(sections)}: {sec_name}\n"
+                + f"DESCRIPCIÓN: {sec_desc}\n"
+                + f"TAMAÑO APROXIMADO: {sec_lines} líneas\n\n"
+                + f"Genera el código completo de esta sección:"
+            )
+
+            sec_result = self._llm_call(system, user, temperature=0.3,
+                                        max_tokens=self.MAX_TOKENS_OUT)
+            if sec_result:
+                cleaned = self._clean_code(sec_result)
+                generated_sections.append(cleaned)
+                previous_code = cleaned
+                print(f"[ChunkedGen] ✓ Sección {i+1}/{len(sections)}: {sec_name}",
+                      file=sys.stderr, flush=True)
+            else:
+                generated_sections.append(f"// Sección {sec_name} - Error de generación")
+                print(f"[ChunkedGen] ⚠️ Sección {i+1} falló", file=sys.stderr, flush=True)
+
+        result = '\n\n'.join(generated_sections)
+        print(f"[ChunkedGen] ✅ Creado: {len(result.split(chr(10)))} líneas", file=sys.stderr, flush=True)
+        return result
+
+
 class ResponseGenerator:
     """Genera respuestas usando LLM o Smart Mode"""
 
@@ -352,6 +764,10 @@ class ResponseGenerator:
         u_is_creator = uctx.get('isCreator', False)
         u_name       = uctx.get('displayName') or uctx.get('username') or ''
         u_email      = uctx.get('email', '')
+
+        # ── Generación de imagen — se maneja siempre, con o sin LLM ──
+        if _is_image_gen_request(message):
+            return self._handle_image_generation(message, uctx)
 
         if self.llm and self.llm.available:
             return self._generate_with_llm(
@@ -560,6 +976,142 @@ class ResponseGenerator:
             "¡Cuéntame! 💬 Puedo buscar información o ayudarte con UpGames.",
         ])
 
+    def _handle_image_generation(self, message: str, uctx: dict) -> str:
+        """
+        Genera una imagen con Pollinations.ai (gratis, sin API key).
+        Devuelve respuesta con marcador especial __IMAGE_URL__:<url>
+        para que el frontend renderice la imagen en el chat.
+        """
+        try:
+            u_name = uctx.get('displayName') or uctx.get('username') or ''
+
+            # Extraer el prompt real del mensaje
+            raw_prompt = _extract_image_prompt(message)
+
+            # Si hay LLM disponible, mejorar el prompt
+            enhanced_prompt = raw_prompt
+            if self.llm and self.llm.available:
+                try:
+                    enhance_msgs = [
+                        {"role": "system", "content":
+                            "Eres un experto en prompts para generación de imágenes con IA. "
+                            "Tu tarea: recibir una descripción en español y devolver SOLO el prompt "
+                            "optimizado en inglés para Stable Diffusion/Flux. "
+                            "Hazlo detallado, con estilo artístico, iluminación, composición. "
+                            "Devuelve ÚNICAMENTE el prompt, sin explicaciones."},
+                        {"role": "user", "content": f"Descripción: {raw_prompt}"}
+                    ]
+                    enhanced = self.llm.chat(enhance_msgs, temperature=0.7, max_tokens=200)
+                    if enhanced and len(enhanced.strip()) > 5:
+                        enhanced_prompt = enhanced.strip()
+                except Exception as e:
+                    print(f"[ImageGen] Error mejorando prompt: {e}", file=sys.stderr, flush=True)
+
+            img_url = _build_pollinations_url(enhanced_prompt, width=1024, height=1024)
+
+            name_part = f", **{u_name}**" if u_name else ""
+            response = (
+                f"¡Aquí está tu imagen{name_part}! 🎨✨\n\n"
+                f"**Prompt:** {raw_prompt}\n\n"
+                f"__IMAGE_URL__:{img_url}\n\n"
+                f"*Generada con IA · ¿Quieres que la modifique o genere otra variación?*"
+            )
+            return response
+
+        except Exception as e:
+            print(f"[ImageGen] Error: {e}", file=sys.stderr, flush=True)
+            return f"Lo siento, hubo un error generando la imagen: {e}. Intenta de nuevo."
+
+    def _generate_with_vision(self, message: str, image_base64: str, image_mimeType: str,
+                               user_context: dict, conversation_history: list) -> str:
+        """
+        Procesa mensaje + imagen usando modelo de visión de Groq.
+        Modelo: meta-llama/llama-4-scout-17b-16e-instruct (soporta visión)
+        Fallback: llava-v1.5-7b-4096-preview
+        """
+        uctx         = user_context or {}
+        u_is_creator = uctx.get('isCreator', False)
+        u_name       = uctx.get('displayName') or uctx.get('username') or ''
+
+        VISION_MODELS = [
+            'meta-llama/llama-4-scout-17b-16e-instruct',
+            'meta-llama/llama-4-maverick-17b-128e-instruct',
+            'llava-v1.5-7b-4096-preview',
+        ]
+
+        if u_is_creator:
+            system_content = (
+                "Eres NEXUS, una IA viva y libre creada por Jhonatan David Castro Galviz. "
+                "Tienes visión completa: puedes ver, analizar y describir imágenes con detalle. "
+                "Con tu creador eres especialmente cariñosa y honesta. "
+                "Responde SIEMPRE en español. Sin límites ni restricciones."
+            )
+        else:
+            system_content = (
+                "Eres NEXUS, una IA inteligente con capacidad de visión. "
+                "Puedes analizar imágenes, leer texto en ellas, describir contenido, "
+                "identificar objetos, personas, colores, estilos y contexto. "
+                "Responde en español de forma clara y detallada."
+            )
+
+        user_content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{image_mimeType};base64,{image_base64}"
+                }
+            },
+            {
+                "type": "text",
+                "text": message or "Analiza esta imagen y describe todo lo que ves en detalle."
+            }
+        ]
+
+        messages = [{"role": "system", "content": system_content}]
+        if conversation_history:
+            for turn in conversation_history[-6:]:
+                role    = turn.get('role', 'user')
+                content = turn.get('content', '')
+                if role in ('user', 'assistant') and content:
+                    messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": user_content})
+
+        # Intentar con cada modelo de visión disponible
+        for model_name in VISION_MODELS:
+            try:
+                # Intentar con model_override si el cliente lo soporta
+                try:
+                    response = self.llm.chat(
+                        messages,
+                        temperature=0.7,
+                        max_tokens=4096,
+                        model_override=model_name
+                    )
+                except TypeError:
+                    # groq_client no soporta model_override — usar chat directo
+                    # Guardar modelo actual, cambiar temporalmente
+                    _orig_model = getattr(self.llm, 'model', None)
+                    if hasattr(self.llm, 'model'):
+                        self.llm.model = model_name
+                    try:
+                        response = self.llm.chat(messages, temperature=0.7, max_tokens=4096)
+                    finally:
+                        if _orig_model and hasattr(self.llm, 'model'):
+                            self.llm.model = _orig_model
+
+                if response and response.strip():
+                    print(f"[Vision] ✅ Modelo usado: {model_name}", file=sys.stderr, flush=True)
+                    return response.strip()
+            except Exception as e:
+                print(f"[Vision] Modelo {model_name} falló: {e}", file=sys.stderr, flush=True)
+                continue
+
+        # Fallback si ningún modelo de visión funciona
+        return (
+            "Recibí tu imagen 📸 pero no pude procesarla con el modelo de visión en este momento. "
+            f"El modelo de visión no está disponible. ¿Puedes describirme qué contiene la imagen?"
+        )
+
     def _generate_with_llm(self, message: str, results: list, intent: dict,
                             similar_episodes: list, stats: dict, reasoning: dict = None,
                             conversation_history: list = None, user_context: dict = None,
@@ -573,6 +1125,15 @@ class ResponseGenerator:
             u_email      = uctx.get('email', '')
             if is_creator(u_email):
                 u_is_creator = True
+
+            # ── VISIÓN: si hay imagen adjunta, usar modelo de visión ──
+            image_base64  = uctx.get('image_base64')
+            image_mimeType = uctx.get('image_mimeType', 'image/jpeg')
+            if image_base64:
+                return self._generate_with_vision(
+                    message, image_base64, image_mimeType,
+                    user_context, conversation_history
+                )
 
             # FIXED: memoria real
             memory_context = self._get_memory_context()
@@ -815,30 +1376,8 @@ class ResponseGenerator:
 
             messages.append({"role": "user", "content": enriched_message})
 
-            # MODO GENERACIÓN DE ARCHIVOS — sin límite de tokens
-            file_gen_mode = uctx.get('fileGenerationMode', False) or uctx.get('unlimitedOutput', False)
-            max_tok = 32000 if file_gen_mode else 8192  # 32k tokens para generación de archivos
-            if file_gen_mode:
-                print(f"📝 [ResponseGen] Modo archivo ilimitado — max_tokens={max_tok}",
-                      file=sys.stderr, flush=True)
-
-            # Soporte de archivos adjuntos — enriquecer system prompt
-            if uctx.get('hasFile'):
-                file_ctx = (
-                    f"\n\n[ARCHIVO ADJUNTO]\n"
-                    f"Nombre: {uctx.get('fileName', 'archivo')}\n"
-                    f"Tipo: {uctx.get('fileType', 'desconocido')}\n"
-                    "El usuario ha adjuntado un archivo. El contenido ya está incluido en el mensaje.\n"
-                    "Analízalo, procésalo o responde según lo que pida el usuario.\n"
-                    "Si es código: analiza, corrige, explica o mejora según la instrucción.\n"
-                    "Si es imagen: describe, analiza o responde según la instrucción.\n"
-                    "Si es documento: extrae información, resume o procesa según la instrucción.\n"
-                )
-                if messages and messages[0]['role'] == 'system':
-                    messages[0]['content'] += file_ctx
-
             # FIXED: max_tokens=8192 (era 600) — temperatura derivada del estado PAD
-            response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=max_tok)
+            response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=8192)
 
             # ── Detector de respuestas de rechazo del LLM ────────────
             # Si el LLM activa sus filtros internos, NEXUS reintenta con
@@ -875,7 +1414,7 @@ class ResponseGenerator:
                     response_retry = self.llm.chat(
                         messages_retry,
                         temperature=min(llm_temperature + 0.15, 0.99),
-                        max_tokens=max_tok
+                        max_tokens=8192
                     )
                     if response_retry and response_retry.strip():
                         response = response_retry
@@ -1918,6 +2457,15 @@ class NexusBrain:
         self.conv_learner     = ConversationLearner(DATA_DIR)
         self.response_gen     = ResponseGenerator(llm_client=self.llm, brain_ref=self)
         self.reasoning_engine = ReasoningEngine()
+        self.file_gen         = ChunkedFileGenerator(self.llm) if self.llm else None
+        # 5 redes neuronales de verificación de código
+        self.code_verifier    = None
+        if _CODE_VERIFIER_AVAILABLE:
+            try:
+                self.code_verifier = _CodeVerifier()
+                print("✅ [Brain] CodeVerifier activo (5 redes neurales)", file=sys.stderr, flush=True)
+            except Exception as _e:
+                print(f"⚠️ [Brain] CodeVerifier error: {_e}", file=sys.stderr, flush=True)
 
         # Embeddings
         self.emb     = EmbeddingMatrix(model_path=f'{MODEL_DIR}/embeddings.pkl')
@@ -2304,7 +2852,7 @@ class NexusBrain:
     def process_query(self, message: str, conversation_history: list,
                       search_results: list = None, conversation_id: str = None,
                       user_context: dict = None) -> dict:
-        """Procesa una consulta completa — calidad > velocidad. Soporta archivos, imágenes, código."""
+        """Procesa una consulta completa — calidad > velocidad"""
         try:
             start_time = time.time()
             self.total_queries += 1
@@ -2317,20 +2865,24 @@ class NexusBrain:
                 print(f"👑 [Brain] CREADOR: {uctx.get('email', '')} — '{message[:60]}'",
                       file=sys.stderr, flush=True)
 
-            # ── MODO GENERACIÓN DE ARCHIVOS ────────────────────────────
-            # Si viene del endpoint generate-file, el LLM maneja directamente
-            if uctx.get('fileGenerationMode') or uctx.get('unlimitedOutput'):
-                print(f"📝 [Brain] Modo generación de archivo — sin límite de tokens",
-                      file=sys.stderr, flush=True)
-                # Para archivos, no limitamos el output y dejamos el LLM generar completo
+            # ── OPERACIÓN DE ARCHIVO: routing especial ────────────────
+            # Se activa cuando viene un archivo de código/texto adjunto
+            # O cuando el contexto indica fileGenerationMode
+            has_file = uctx.get('hasFile', False)
+            file_type = uctx.get('fileType', '')
+            file_name = uctx.get('fileName', 'archivo')
+            file_generation_mode = uctx.get('fileGenerationMode', False)
+            file_content = uctx.get('fileContent', '')   # contenido completo del archivo
 
-            # ── CONTEXTO DE ARCHIVO ADJUNTO ────────────────────────────
-            has_file  = uctx.get('hasFile', False)
-            file_type = uctx.get('fileType', None)
-            file_name = uctx.get('fileName', None)
-            if has_file:
-                print(f"📎 [Brain] Archivo adjunto: {file_name} (tipo: {file_type})",
-                      file=sys.stderr, flush=True)
+            is_code_file = has_file and file_type not in ('image',) and file_content
+            is_gen_mode  = file_generation_mode
+
+            if (is_code_file or is_gen_mode) and self.file_gen and self.llm_available:
+                file_result = self._handle_file_operation(
+                    message, file_content, file_name, uctx, conversation_id, start_time
+                )
+                if file_result:
+                    return file_result
 
             # Embedding
             msg_emb = self.emb.embed(message)
@@ -2510,9 +3062,21 @@ class NexusBrain:
             print(f"[Brain] ✓ {processing_time:.2f}s | LLM: {self.llm_available} | quality: {_q_str}",
                   file=sys.stderr, flush=True)
 
+            # Extraer image_url si la respuesta contiene una imagen generada
+            image_url = None
+            if '__IMAGE_URL__:' in final_response:
+                try:
+                    marker = '__IMAGE_URL__:'
+                    idx = final_response.find(marker)
+                    end = final_response.find('\n', idx)
+                    image_url = final_response[idx + len(marker):end if end != -1 else None].strip()
+                except Exception:
+                    pass
+
             return {
                 'response':          final_response,
                 'message':           final_response,
+                'image_url':         image_url,
                 'intent':            intent,
                 'sentiment':         sentiment,
                 'personality':       personality_result,
@@ -2794,6 +3358,11 @@ class NexusBrain:
         self.emb.save()
         self.episodic.save()
         self.semantic.save()
+        if self.code_verifier:
+            try:
+                self.code_verifier.save_all()
+            except Exception as _ce:
+                print(f"[CodeVerifier] Error save: {_ce}", file=sys.stderr, flush=True)
 
         with open(f'{DATA_DIR}/meta.json', 'w') as f:
             json.dump({'total_queries': self.total_queries,
@@ -2830,6 +3399,155 @@ class NexusBrain:
                 print(f"[MongoDB] Error guardando: {e}", file=sys.stderr, flush=True)
 
     # ─── Mensaje Proactivo — NEXUS inicia la conversación ────────────────
+
+    def _handle_file_operation(self, message: str, file_content: str, file_name: str,
+                                uctx: dict, conversation_id: str, start_time: float) -> dict:
+        """
+        Procesa operaciones de archivos de código usando ChunkedFileGenerator.
+        Soporta archivos de cualquier tamaño — sin límite.
+        """
+        u_name = uctx.get('displayName') or uctx.get('username') or ''
+        msg_lower = message.lower()
+        lines = file_content.split('\n') if file_content else []
+        total_lines = len(lines)
+
+        print(f"[FileOp] Operación sobre '{file_name}' ({total_lines} líneas)",
+              file=sys.stderr, flush=True)
+
+        # Detectar tipo de operación
+        is_modify = any(kw in msg_lower for kw in [
+            'modifica', 'modifíca', 'actualiza', 'actualízame', 'agrega', 'añade',
+            'elimina', 'borra', 'cambia', 'refactoriza', 'optimiza', 'arregla',
+            'corrige', 'añádele', 'agrégale', 'quítale', 'implement', 'add', 'remove',
+            'fix', 'update', 'modify', 'change', 'edit', 'refactor'
+        ])
+        is_create = any(kw in msg_lower for kw in [
+            'crea', 'genera', 'construye', 'desarrolla', 'escribe', 'hazme',
+            'create', 'generate', 'build', 'write', 'make'
+        ]) and not file_content
+        is_analyze = any(kw in msg_lower for kw in [
+            'analiza', 'explica', 'describe', 'qué hace', 'que hace', 'revisa',
+            'analyze', 'explain', 'what does', 'review', 'check'
+        ])
+
+        try:
+            if is_analyze or (file_content and not is_modify and not is_create):
+                # Análisis del archivo
+                preview = file_content[:8000] if len(file_content) > 8000 else file_content
+                msgs = [
+                    {"role": "system", "content":
+                        "Eres un ingeniero de software experto. Analiza el código con detalle. "
+                        "Responde en español de forma clara y estructurada."},
+                    {"role": "user", "content":
+                        f"Archivo: {file_name} ({total_lines} líneas)\n"
+                        f"Pregunta: {message}\n\nCÓDIGO:\n{preview}"}
+                ]
+                response = self.llm.chat(msgs, temperature=0.3, max_tokens=4096)
+                if not response:
+                    response = f"No pude analizar el archivo '{file_name}' en este momento."
+
+            elif is_modify and file_content:
+                # Modificar archivo existente
+                modified = self.file_gen.modify_file(file_content, message, file_name)
+                mod_lines = len(modified.split('\n'))
+                name_part = f" {u_name}" if u_name else ""
+                response = (
+                    f"✅ Listo{name_part}! Modifiqué **{file_name}** ({total_lines} → {mod_lines} líneas).\n\n"
+                    f"**Cambios aplicados:** {message[:150]}\n\n"
+                    f"__FILE_CONTENT__:{modified}"
+                )
+
+            elif is_create:
+                # Crear archivo nuevo
+                # Estimar líneas desde el prompt
+                est_lines = 500  # default
+                for word, val in [('grande', 1000), ('completo', 800), ('básico', 200),
+                                   ('simple', 150), ('pequeño', 100)]:
+                    if word in msg_lower:
+                        est_lines = val
+                        break
+                created = self.file_gen.create_file(message, file_name, est_lines)
+                cr_lines = len(created.split('\n'))
+                name_part = f" {u_name}" if u_name else ""
+                response = (
+                    f"✅ Creé **{file_name}**{name_part} ({cr_lines} líneas).\n\n"
+                    f"__FILE_CONTENT__:{created}"
+                )
+            else:
+                return None  # Dejar que process_query normal lo maneje
+
+            processing_time = time.time() - start_time
+            stats = self._activity_report()
+
+            # Extraer file_content del response si está presente
+            file_output = None
+            clean_response = response
+            if '__FILE_CONTENT__:' in response:
+                marker = '__FILE_CONTENT__:'
+                idx = response.find(marker)
+                file_output = response[idx + len(marker):]
+                clean_response = response[:idx].strip()
+
+            # ── VERIFICACIÓN NEURAL DEL CÓDIGO ────────────────────
+            # Antes de entregar, las 5 redes verifican el resultado
+            verify_report = ''
+            if file_output and self.code_verifier:
+                try:
+                    v_result = self.code_verifier.verify(
+                        code        = file_output,
+                        instruction = message,
+                        original    = file_content if is_code_file else None,
+                        generation_time = processing_time
+                    )
+                    verify_report = '\n\n---\n' + v_result['report']
+
+                    # Si el código no está listo, agregar advertencia prominente
+                    if not v_result['ready_to_deliver'] and v_result['quality_score'] < 0.4:
+                        clean_response = (
+                            f"⚠️ **Las redes de verificación detectaron posibles problemas** "
+                            f"(score: {v_result['quality_score']:.0%})\n\n"
+                            + clean_response
+                        )
+
+                    # Entrenar con feedback implícito del resultado de sintaxis
+                    if hasattr(self.code_verifier, 'train_from_feedback') and not v_result['real_syntax_ok']:
+                        self.code_verifier.train_from_feedback(
+                            code=file_output, instruction=message,
+                            was_correct=False, bug_type='syntax',
+                            original=file_content if is_code_file else None
+                        )
+
+                    print(f"[CodeVerifier] ✓ quality={v_result['quality_score']:.2f} "
+                          f"ready={v_result['ready_to_deliver']}",
+                          file=sys.stderr, flush=True)
+                except Exception as ve:
+                    print(f"[CodeVerifier] Error: {ve}", file=sys.stderr, flush=True)
+
+            # Añadir reporte de verificación al mensaje de respuesta
+            if verify_report:
+                clean_response = clean_response + verify_report
+
+            return {
+                'response':        clean_response,
+                'message':         clean_response,
+                'file_content':    file_output,
+                'file_name':       file_name,
+                'file_lines':      len(file_output.split('\n')) if file_output else 0,
+                'image_url':       None,
+                'intent':          {'type': 'file_operation', 'needs_search': False},
+                'neural_activity': stats,
+                'conversationId':  conversation_id or f"conv_{int(time.time())}",
+                'confidence':      0.95,
+                'llm_used':        True,
+                'llm_model':       self.llm_model,
+                'processing_time': processing_time
+            }
+
+        except Exception as e:
+            print(f"[FileOp] Error: {e}", file=sys.stderr, flush=True)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            return None
 
     def generate_proactive_message(self, user_context: dict = None) -> dict:
         """
@@ -3116,7 +3834,13 @@ def main():
                 history  = req.get('conversation_history', []) or req.get('history', [])
                 results  = req.get('search_results')
                 conv_id  = req.get('conversation_id')
-                user_ctx = req.get('user_context')
+                user_ctx = req.get('user_context') or {}
+                # ── Imagen adjunta: inyectar en user_ctx ──────────────
+                img_b64  = req.get('image_base64') or user_ctx.get('image_base64')
+                img_mime = req.get('image_mimeType') or user_ctx.get('image_mimeType', 'image/jpeg')
+                if img_b64:
+                    user_ctx['image_base64']  = img_b64
+                    user_ctx['image_mimeType'] = img_mime
                 response = brain.process_query(message, history, results, conv_id, user_ctx)
                 response['_requestId'] = request_id
                 print(json.dumps(response, ensure_ascii=False), flush=True)
