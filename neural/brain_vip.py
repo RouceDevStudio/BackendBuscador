@@ -815,8 +815,30 @@ class ResponseGenerator:
 
             messages.append({"role": "user", "content": enriched_message})
 
+            # MODO GENERACIÓN DE ARCHIVOS — sin límite de tokens
+            file_gen_mode = uctx.get('fileGenerationMode', False) or uctx.get('unlimitedOutput', False)
+            max_tok = 32000 if file_gen_mode else 8192  # 32k tokens para generación de archivos
+            if file_gen_mode:
+                print(f"📝 [ResponseGen] Modo archivo ilimitado — max_tokens={max_tok}",
+                      file=sys.stderr, flush=True)
+
+            # Soporte de archivos adjuntos — enriquecer system prompt
+            if uctx.get('hasFile'):
+                file_ctx = (
+                    f"\n\n[ARCHIVO ADJUNTO]\n"
+                    f"Nombre: {uctx.get('fileName', 'archivo')}\n"
+                    f"Tipo: {uctx.get('fileType', 'desconocido')}\n"
+                    "El usuario ha adjuntado un archivo. El contenido ya está incluido en el mensaje.\n"
+                    "Analízalo, procésalo o responde según lo que pida el usuario.\n"
+                    "Si es código: analiza, corrige, explica o mejora según la instrucción.\n"
+                    "Si es imagen: describe, analiza o responde según la instrucción.\n"
+                    "Si es documento: extrae información, resume o procesa según la instrucción.\n"
+                )
+                if messages and messages[0]['role'] == 'system':
+                    messages[0]['content'] += file_ctx
+
             # FIXED: max_tokens=8192 (era 600) — temperatura derivada del estado PAD
-            response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=8192)
+            response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=max_tok)
 
             # ── Detector de respuestas de rechazo del LLM ────────────
             # Si el LLM activa sus filtros internos, NEXUS reintenta con
@@ -853,7 +875,7 @@ class ResponseGenerator:
                     response_retry = self.llm.chat(
                         messages_retry,
                         temperature=min(llm_temperature + 0.15, 0.99),
-                        max_tokens=8192
+                        max_tokens=max_tok
                     )
                     if response_retry and response_retry.strip():
                         response = response_retry
@@ -2282,7 +2304,7 @@ class NexusBrain:
     def process_query(self, message: str, conversation_history: list,
                       search_results: list = None, conversation_id: str = None,
                       user_context: dict = None) -> dict:
-        """Procesa una consulta completa — calidad > velocidad"""
+        """Procesa una consulta completa — calidad > velocidad. Soporta archivos, imágenes, código."""
         try:
             start_time = time.time()
             self.total_queries += 1
@@ -2293,6 +2315,21 @@ class NexusBrain:
 
             if u_is_creator:
                 print(f"👑 [Brain] CREADOR: {uctx.get('email', '')} — '{message[:60]}'",
+                      file=sys.stderr, flush=True)
+
+            # ── MODO GENERACIÓN DE ARCHIVOS ────────────────────────────
+            # Si viene del endpoint generate-file, el LLM maneja directamente
+            if uctx.get('fileGenerationMode') or uctx.get('unlimitedOutput'):
+                print(f"📝 [Brain] Modo generación de archivo — sin límite de tokens",
+                      file=sys.stderr, flush=True)
+                # Para archivos, no limitamos el output y dejamos el LLM generar completo
+
+            # ── CONTEXTO DE ARCHIVO ADJUNTO ────────────────────────────
+            has_file  = uctx.get('hasFile', False)
+            file_type = uctx.get('fileType', None)
+            file_name = uctx.get('fileName', None)
+            if has_file:
+                print(f"📎 [Brain] Archivo adjunto: {file_name} (tipo: {file_type})",
                       file=sys.stderr, flush=True)
 
             # Embedding
