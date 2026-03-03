@@ -794,6 +794,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             resultsCount:searchResults?.length||0, intent:thought.intent,
             llmUsed:thought.llm_used||false, llmModel:thought.llm_model||null,
             processingTime:thought.processing_time||null,
+            image_url: thought.image_url || null,
             plan:planStatus.plan, messagesUsed:msgsToday, messagesLimit:FREE_MSG_PER_DAY,
             isCreator, brainVersion,
             ts:new Date().toISOString()
@@ -952,11 +953,12 @@ app.post('/api/upload', requireAuth, (req, res) => {
                 mimeType: mimetype,
                 base64: content.base64 || null,
                 thumbBase64,
-                text: content.text || null,
+                text: content.text || null,          // texto completo SIN truncar
                 textSummary: content.textSummary,
                 meta: content.meta || null,
                 pages: content.pages || null,
-                ext: content.ext || null
+                ext: content.ext || null,
+                lines: content.text ? content.text.split('\n').length : null
             });
         } catch (e) {
             console.error('[upload]', e.message);
@@ -994,7 +996,12 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
     // Construir el mensaje enriquecido con el archivo
     let enrichedMessage = message || '';
     if (fileData) {
-        enrichedMessage = `${fileData.textSummary}\n\n${message || 'Analiza este archivo y responde.'}`;
+        if (fileData.type === 'image') {
+            // Para imágenes NO ponemos textSummary — el brain usa visión directamente
+            enrichedMessage = message || 'Analiza esta imagen y describe todo lo que ves.';
+        } else {
+            enrichedMessage = `${fileData.textSummary || ''}\n\n${message || 'Analiza este archivo y responde.'}`;
+        }
     }
 
     const userContext = {
@@ -1004,7 +1011,12 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
         plan: planStatus.plan, isVip, isCreator,
         hasFile: !!fileData,
         fileType: fileData?.type || null,
-        fileName: fileData?.name || null
+        fileName: fileData?.name || null,
+        // Pasar base64 de imagen directamente al brain para visión
+        image_base64:  (fileData?.type === 'image') ? (fileData?.base64 || null) : null,
+        image_mimeType: (fileData?.type === 'image') ? (fileData?.mimeType || 'image/jpeg') : null,
+        // Pasar contenido completo de archivos de código/texto
+        fileContent: (fileData?.type !== 'image') ? (fileData?.text || '') : '',
     };
 
     try {
@@ -1012,6 +1024,26 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
         const convId = conversationId || `conv_${Date.now()}`;
         const thought = await activeBrain.process(enrichedMessage, conversationHistory, null, userContext);
         const responseText = thought.response || thought.message || 'Lo siento, no pude procesar el archivo.';
+        const imageUrl = thought.image_url || null;
+        const fileOutput = thought.file_content || null;
+        const fileOutputName = thought.file_name || fileData?.name || 'archivo_modificado.txt';
+        const fileOutputLines = thought.file_lines || 0;
+
+        // Si hay archivo generado, guardarlo en disco para descarga
+        let downloadUrl = null;
+        if (fileOutput) {
+            try {
+                const safeName = fileOutputName.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const outPath  = path.join(GENERATED_DIR, safeName);
+                await fs.writeFile(outPath, fileOutput, 'utf-8');
+                downloadUrl = `/generated/${safeName}`;
+                console.log(`📁 [file-output] ${safeName} (${fileOutputLines} líneas) → ${downloadUrl}`);
+                // Auto-limpiar después de 2 horas
+                setTimeout(() => fs.unlink(outPath).catch(() => {}), 2 * 60 * 60 * 1000);
+            } catch(e) {
+                console.error('[file-save]', e.message);
+            }
+        }
 
         setTimeout(() => { activeBrain.learn(enrichedMessage, responseText, true, []).catch(() => {}); }, 100);
 
@@ -1022,7 +1054,17 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
             ]).catch(() => {});
         }
 
-        res.json({ message: responseText, conversationId: convId, plan: planStatus.plan, ts: new Date().toISOString() });
+        res.json({
+            message: responseText,
+            image_url: imageUrl,
+            file_output: fileOutput ? true : false,
+            file_name: fileOutputName,
+            file_lines: fileOutputLines,
+            download_url: downloadUrl,
+            conversationId: convId,
+            plan: planStatus.plan,
+            ts: new Date().toISOString()
+        });
     } catch (e) {
         console.error('[chat-with-file]', e.message);
         res.status(500).json({ error: 'Error procesando archivo con el cerebro' });
