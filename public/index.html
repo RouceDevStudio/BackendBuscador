@@ -665,6 +665,24 @@
 .msg-file-chip-size { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
 .msg-img-preview { padding-left:39px; margin-bottom:8px; }
 .msg-img-preview img { max-width:280px; max-height:200px; border-radius:12px; border:1px solid var(--border2); object-fit:cover; }
+/* ── Imagen generada por IA ── */
+.msg-bubble-image { padding:12px 14px 10px 14px !important; }
+.gen-img-container { position:relative; margin-bottom:10px; }
+.gen-img-loading { display:flex; align-items:center; gap:10px; padding:20px; background:var(--bg2); border-radius:10px; color:var(--text2); font-size:13px; }
+.gen-img-spinner { width:20px; height:20px; border:2px solid var(--border2); border-top-color:var(--neon); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0; }
+.gen-img { max-width:100%; max-height:480px; border-radius:12px; border:1px solid var(--border2); display:block; }
+.gen-img-caption { font-size:12px; color:var(--text3); margin-bottom:8px; font-style:italic; }
+.gen-img-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.gen-img-btn { background:var(--bg3); border:1px solid var(--border2); color:var(--text2); padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; transition:all .15s; }
+.gen-img-btn:hover { border-color:var(--neon); color:var(--neon); }
+/* ── Archivo generado — tarjeta de descarga ── */
+.file-dl-card { display:flex; align-items:center; gap:12px; background:var(--bg2); border:1px solid var(--border2); border-radius:12px; padding:14px 16px; }
+.file-dl-icon { font-size:28px; flex-shrink:0; }
+.file-dl-info { flex:1; min-width:0; }
+.file-dl-name { font-size:14px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.file-dl-meta { font-size:12px; color:var(--text3); margin-top:2px; }
+.file-dl-btn { flex-shrink:0; background:var(--neon); color:#000; font-weight:700; font-size:13px; padding:8px 16px; border-radius:8px; text-decoration:none; white-space:nowrap; transition:opacity .15s; }
+.file-dl-btn:hover { opacity:0.85; }
 
 /* ── CODE GEN PANEL ── */
 #panel-codegen { padding: 0; }
@@ -1601,7 +1619,18 @@ async function sendMessage(preset) {
     if(!data.llmUsed&&ollamaAvailable&&!fileSnapshot){
       try{const or=await callOllamaLocal(finalMsg);if(or&&or.trim().length>10)finalMessage=or}catch(e){}
     }
-    addMessageWithFile(finalMessage,'ai',data,null); hPush('ai',finalMessage);
+    // Limpiar el marcador __IMAGE_URL__ del texto visible
+    const cleanMessage = finalMessage.replace(/__IMAGE_URL__:[^\n]*/g, '').trim();
+    addMessageWithFile(cleanMessage,'ai',data,null);
+    // Si hay imagen generada, renderizarla en el chat
+    if(data.image_url){
+      addGeneratedImage(data.image_url, finalMessage);
+    }
+    // Si hay archivo generado para descargar
+    if(data.download_url){
+      addFileDownload(data.download_url, data.file_name, data.file_lines);
+    }
+    hPush('ai',cleanMessage);
     if(data.neuralActivity||data.neural_activity) updateStats(data.neuralActivity||data.neural_activity);
     setStatus(true,'Cerebro activo');
     document.getElementById('hint').textContent='NEXUS listo · 📎 adjunta archivos · Enter para enviar';
@@ -1831,6 +1860,103 @@ function addMessageWithFile(content, role='ai', extras={}, fileData=null) {
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
   return wrap;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  IMAGEN GENERADA — renderizar en el chat
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function addGeneratedImage(imageUrl, fullMessage) {
+  const msgs = document.getElementById('messages');
+  const now  = new Date();
+  const timeStr = now.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-ai msg-image-gen';
+
+  // Extraer un título del prompt si existe
+  let promptText = '';
+  const promptMatch = fullMessage.match(/\*\*Prompt:\*\*\s*([^\n]+)/);
+  if (promptMatch) promptText = promptMatch[1].trim();
+
+  wrap.innerHTML = `
+    <div class="msg-header">
+      <div class="msg-avatar">🎨</div>
+      <span class="msg-name">NEXUS · Imagen generada</span>
+      <span class="msg-ts">${timeStr}</span>
+    </div>
+    <div class="msg-bubble msg-bubble-image">
+      <div class="gen-img-container">
+        <div class="gen-img-loading" id="gen-img-loading-${Date.now()}">
+          <div class="gen-img-spinner"></div>
+          <span>Generando imagen${promptText ? ': ' + promptText.slice(0,40) + (promptText.length>40?'...':'') : ''}…</span>
+        </div>
+        <img class="gen-img" src="${imageUrl}"
+          onload="this.style.display='block';this.previousElementSibling.style.display='none';"
+          onerror="this.previousElementSibling.innerHTML='<span>⚠️ No se pudo cargar la imagen. <a href=\\'${imageUrl}\\' target=\\'_blank\\'>Abrir enlace</a></span>'"
+          style="display:none;max-width:100%;border-radius:12px;cursor:pointer;"
+          onclick="window.open('${imageUrl}','_blank')"
+          title="Click para abrir en tamaño completo"
+        />
+      </div>
+      ${promptText ? `<div class="gen-img-caption">📝 ${promptText}</div>` : ''}
+      <div class="gen-img-actions">
+        <button class="gen-img-btn" onclick="window.open('${imageUrl}','_blank')">🔍 Ver completa</button>
+        <button class="gen-img-btn" onclick="downloadGenImage('${imageUrl}','nexus_imagen.jpg')">⬇️ Descargar</button>
+      </div>
+    </div>`;
+
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function downloadGenImage(url, filename) {
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.target = '_blank';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ARCHIVO GENERADO — botón de descarga en el chat
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function addFileDownload(downloadUrl, fileName, fileLines) {
+  const msgs = document.getElementById('messages');
+  const now  = new Date();
+  const timeStr = now.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+
+  // Icono según extensión
+  const ext = (fileName || '').split('.').pop().toLowerCase();
+  const iconMap = {
+    js:'🟨', ts:'🔷', py:'🐍', html:'🌐', css:'🎨', json:'📋',
+    sql:'🗄️', sh:'⚙️', php:'🐘', java:'☕', go:'🐹', rs:'🦀',
+    cpp:'⚙️', c:'⚙️', cs:'💜', rb:'💎', swift:'🍎', kt:'🟣',
+    md:'📝', txt:'📄', yaml:'⚙️', yml:'⚙️', env:'🔑', xml:'📋',
+    zip:'📦'
+  };
+  const icon = iconMap[ext] || '📄';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-ai';
+  wrap.innerHTML = `
+    <div class="msg-header">
+      <div class="msg-avatar">⚡</div>
+      <span class="msg-name">NEXUS · Archivo listo</span>
+      <span class="msg-ts">${timeStr}</span>
+    </div>
+    <div class="msg-bubble">
+      <div class="file-dl-card">
+        <div class="file-dl-icon">${icon}</div>
+        <div class="file-dl-info">
+          <div class="file-dl-name">${fileName || 'archivo'}</div>
+          <div class="file-dl-meta">${fileLines ? fileLines.toLocaleString() + ' líneas' : 'Archivo completo'} · Listo para descargar</div>
+        </div>
+        <a class="file-dl-btn" href="${downloadUrl}" download="${fileName || 'archivo'}" target="_blank">
+          ⬇️ Descargar
+        </a>
+      </div>
+    </div>`;
+
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
