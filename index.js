@@ -1210,12 +1210,28 @@ Genera "${fileName}" ahora:`;
 
             const fileThought = await activeBrain.process(filePrompt, [], null, {
                 userId, email: userEmail, isVip, isCreator, plan: planStatus.plan,
-                fileGenerationMode: true, unlimitedOutput: useVipBrain
+                fileGenerationMode: true, unlimitedOutput: useVipBrain,
+                fileName: fileName,
+                hasFile: false,
+                fileContent: '',
+                fileType: ext
             });
 
-            let content = fileThought.response || fileThought.message || `// Error generando ${fileName}`;
-            const codeMatch = content.match(/```[\w]*\n?([\s\S]*?)```/);
-            if (codeMatch) content = codeMatch[1].trim();
+            let content = '';
+            // Primero intentar file_content (devuelto por _handle_file_operation)
+            if (fileThought.file_content && fileThought.file_content.trim()) {
+                content = fileThought.file_content;
+            } else {
+                content = fileThought.response || fileThought.message || '';
+                // Limpiar markdown fences
+                const codeMatch = content.match(/```[\w]*\n?([\s\S]*?)```/s);
+                if (codeMatch) content = codeMatch[1].trim();
+            }
+            // Si sigue vacío, loguear y poner fallback descriptivo
+            if (!content.trim()) {
+                console.error(`[generate-project] ⚠️ Contenido vacío para ${fileName}`);
+                content = `/* NEXUS: Error generando ${fileName} — reintenta con un prompt más detallado */`;
+            }
 
             let downloadUrl = null;
             try {
@@ -1314,10 +1330,20 @@ Genera el contenido completo del archivo. No pongas explicaciones, solo el conte
             userId, email: userEmail, isVip, isCreator,
             plan: planStatus.plan,
             fileGenerationMode: true,
-            unlimitedOutput: true
+            unlimitedOutput: true,
+            fileName: fileName || `archivo.${fileType || 'txt'}`,
+            hasFile: !!(op === 'edit' || op === 'fix'),
+            fileContent: currentContent || '',
+            fileType: fileType || 'txt'
         });
 
-        const content = thought.response || thought.message || '';
+        // Priorizar file_content (devuelto por _handle_file_operation)
+        let content = '';
+        if (thought.file_content && thought.file_content.trim()) {
+            content = thought.file_content;
+        } else {
+            content = thought.response || thought.message || '';
+        }
 
         // Guardar en disco si es un archivo real (no solo análisis)
         let savedFileName = null;
