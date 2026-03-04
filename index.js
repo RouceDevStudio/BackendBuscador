@@ -63,7 +63,31 @@ const PAYPAL_EMAIL     = 'jhonatandavidcastrogalviz@gmail.com';
 const PLAN_PRICE       = 10.00;
 const PLAN_CURRENCY    = 'USD';
 const FREE_MSG_PER_DAY = 10;
+const FREE_GEN_PER_DAY = 5;   // archivos CodeGen + imágenes generadas (plan free)
 const PLAN_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+
+// ── Contador diario de generaciones para plan Free ─────────────────
+// { userId: { date: 'YYYY-MM-DD', count: N } }
+const freeGenCounter = {};
+
+function getFreeGenToday(userId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = freeGenCounter[userId];
+    if (!entry || entry.date !== today) {
+        freeGenCounter[userId] = { date: today, count: 0 };
+    }
+    return freeGenCounter[userId].count;
+}
+
+function incrementFreeGen(userId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = freeGenCounter[userId];
+    if (!entry || entry.date !== today) {
+        freeGenCounter[userId] = { date: today, count: 1 };
+    } else {
+        entry.count++;
+    }
+}
 
 // ── Cuentas VIP permanentes ────────────────────────────────────────
 const VIP_ACCOUNTS = [
@@ -1088,6 +1112,137 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
 //  GENERACIÓN DE ARCHIVOS (código, docs, etc.) — SIN LÍMITE
 // ══════════════════════════════════════════════════════════════════
 
+// POST /api/generate-project — genera proyecto completo multi-archivo
+app.post('/api/generate-project', requireAuth, async (req, res) => {
+    if (!checkRateLimit(req, res, 10, 60000)) return;
+    const { prompt, category, projectName } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Se requiere descripción del proyecto' });
+
+    const userId = req.user.id;
+    const { ObjectId } = require('mongodb');
+    const user = db ? await db.collection('users').findOne({ _id: new ObjectId(userId) }) : null;
+    const planStatus = user ? await getPlanStatus(user) : { plan: 'free' };
+    const userEmail = user?.email || req.user.email || '';
+    const isCreator = isCreatorAccount(userEmail);
+    const isVip     = user?.isVip || isVipAccount(userEmail);
+    const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
+    const activeBrain = useVipBrain ? brainVip : brainBase;
+
+    // ── Límite diario para plan Free ───────────────────────────────
+    if (!useVipBrain) {
+        const genToday = getFreeGenToday(userId);
+        if (genToday >= FREE_GEN_PER_DAY) {
+            return res.status(429).json({
+                error: `Límite de ${FREE_GEN_PER_DAY} generaciones por día del plan gratuito alcanzado. Se renueva a medianoche. Actualiza a Ultra para proyectos ilimitados.`,
+                limitReached: true, genUsed: genToday, genLimit: FREE_GEN_PER_DAY
+            });
+        }
+        // Cuenta como 1 uso el proyecto completo (no por archivo)
+        incrementFreeGen(userId);
+        console.log(`[Free] generate-project — ${getFreeGenToday(userId)}/${FREE_GEN_PER_DAY} usos hoy (user: ${userId})`);
+    }
+
+    const FILE_MAPS = {
+        web:       ['index.html','style.css','script.js'],
+        game:      ['index.html','game.js','style.css'],
+        app:       ['App.jsx','styles.css','logic.js','README.md'],
+        software:  ['main.py','utils.py','config.json','README.md'],
+        api:       ['server.js','routes.js','middleware.js','package.json'],
+        bot:       ['bot.js','commands.js','config.json','.env.example'],
+        emulator:  ['index.html','cpu.js','memory.js','display.js'],
+        tool:      ['index.html','tool.js','style.css','README.md'],
+        dashboard: ['index.html','dashboard.js','charts.js','style.css'],
+        extension: ['manifest.json','popup.html','popup.js','background.js','style.css'],
+    };
+
+    // Plan free: limitar a 3 archivos por proyecto (Ultra: hasta 10)
+    const MAX_PROJECT_FILES = useVipBrain ? 10 : 3;
+
+    const cat      = category || 'web';
+    const baseFiles = (FILE_MAPS[cat] || FILE_MAPS['web']).slice(0, MAX_PROJECT_FILES);
+    const pName    = projectName || 'mi_proyecto';
+
+    console.log(`🚀 [generate-project] cat:${cat} name:${pName} plan:${planStatus.plan} prompt:${prompt.slice(0,80)}`);
+
+    try {
+        // Paso 1: decidir estructura de archivos
+        const planPrompt = `Eres un arquitecto de software experto. El usuario quiere crear el siguiente proyecto:
+
+CATEGORÍA: ${cat}
+NOMBRE: ${pName}
+DESCRIPCIÓN: ${prompt}
+ARCHIVOS BASE SUGERIDOS: ${baseFiles.join(', ')}
+MÁXIMO DE ARCHIVOS: ${MAX_PROJECT_FILES}
+
+Responde ÚNICAMENTE con JSON válido, sin explicaciones:
+{"files": ["index.html", "game.js", "style.css"]}`;
+
+        const planThought = await activeBrain.process(planPrompt, [], null, {
+            userId, email: userEmail, isVip, isCreator, plan: planStatus.plan,
+            fileGenerationMode: true
+        });
+        let fileList = baseFiles;
+        try {
+            const raw = planThought.response || planThought.message || '';
+            const jsonMatch = raw.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (Array.isArray(parsed.files) && parsed.files.length > 0) {
+                    fileList = parsed.files.slice(0, MAX_PROJECT_FILES);
+                }
+            }
+        } catch(e) { /* usar lista base */ }
+
+        console.log(`[generate-project] Archivos: ${fileList.join(', ')}`);
+
+        // Paso 2: generar cada archivo completo
+        const generatedFiles = [];
+        for (const fileName of fileList) {
+            const ext = fileName.split('.').pop().toLowerCase();
+            const filePrompt = `PROYECTO: ${pName} (categoría: ${cat})
+DESCRIPCIÓN COMPLETA: ${prompt}
+ARCHIVOS DEL PROYECTO: ${fileList.join(', ')}
+ARCHIVOS YA GENERADOS: ${generatedFiles.map(f => f.name).join(', ') || 'ninguno aún'}
+
+TAREA: Genera el archivo "${fileName}" COMPLETO Y FUNCIONAL.
+REGLAS: Solo el contenido del archivo. Sin markdown fences. Sin TODOs. Sin placeholders.
+Genera "${fileName}" ahora:`;
+
+            const fileThought = await activeBrain.process(filePrompt, [], null, {
+                userId, email: userEmail, isVip, isCreator, plan: planStatus.plan,
+                fileGenerationMode: true, unlimitedOutput: useVipBrain
+            });
+
+            let content = fileThought.response || fileThought.message || `// Error generando ${fileName}`;
+            const codeMatch = content.match(/```[\w]*\n?([\s\S]*?)```/);
+            if (codeMatch) content = codeMatch[1].trim();
+
+            let downloadUrl = null;
+            try {
+                const safeName = `${pName}_${fileName}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const outPath  = path.join(GENERATED_DIR, safeName);
+                await fs.writeFile(outPath, content, 'utf-8');
+                downloadUrl = `/generated/${safeName}`;
+                setTimeout(() => fs.unlink(outPath).catch(() => {}), 2 * 60 * 60 * 1000);
+            } catch(e) { console.error('[generate-project] save error:', e.message); }
+
+            generatedFiles.push({ name: fileName, content, downloadUrl, lines: content.split('\n').length });
+            console.log(`[generate-project] ✓ ${fileName} (${content.split('\n').length} líneas)`);
+        }
+
+        res.json({
+            ok: true, category: cat, projectName: pName,
+            files: generatedFiles, totalFiles: generatedFiles.length,
+            genUsed: getFreeGenToday(userId), genLimit: useVipBrain ? null : FREE_GEN_PER_DAY,
+            ts: new Date().toISOString()
+        });
+
+    } catch(e) {
+        console.error('[generate-project]', e.message);
+        res.status(500).json({ error: `Error generando proyecto: ${e.message}` });
+    }
+});
+
 // POST /api/generate-file — genera archivo de cualquier tipo y tamaño
 app.post('/api/generate-file', requireAuth, async (req, res) => {
     if (!checkRateLimit(req, res, 20, 60000)) return;
@@ -1103,6 +1258,19 @@ app.post('/api/generate-file', requireAuth, async (req, res) => {
     const isVip     = user?.isVip || isVipAccount(userEmail);
     const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
     const activeBrain = useVipBrain ? brainVip : brainBase;
+
+    // ── Límite diario de generaciones para plan Free ───────────────
+    if (!useVipBrain) {
+        const genToday = getFreeGenToday(userId);
+        if (genToday >= FREE_GEN_PER_DAY) {
+            return res.status(429).json({
+                error: `Límite de ${FREE_GEN_PER_DAY} archivos/imágenes por día del plan gratuito alcanzado. Se renueva a medianoche. Actualiza a Ultra para generaciones ilimitadas.`,
+                limitReached: true, genUsed: genToday, genLimit: FREE_GEN_PER_DAY
+            });
+        }
+        incrementFreeGen(userId);
+        console.log(`[Free] generate-file — ${getFreeGenToday(userId)}/${FREE_GEN_PER_DAY} usos hoy (user: ${userId})`);
+    }
 
     // Operaciones: 'create' | 'edit' | 'analyze' | 'fix' | 'extend'
     const op = operation || 'create';
