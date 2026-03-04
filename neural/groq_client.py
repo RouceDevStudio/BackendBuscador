@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UnifiedLLMClient - Cliente unificado para Groq y Ollama
+UnifiedLLMClient - Cliente unificado para Anthropic Claude, Groq y Ollama
 Creado por: Jhonatan David Castro Galvis
 
 Lógica de disponibilidad dinámica:
-  - Ambos clientes (Groq + Ollama) se inicializan siempre
-  - En cada llamada: intenta el preferido primero, luego el otro
+  - Los tres clientes (Claude + Groq + Ollama) se inicializan siempre
+  - En cada llamada: intenta el preferido primero, luego los demás en orden
   - Si ninguno responde → retorna None → brain usa Smart Mode
   - Re-chequea disponibilidad cada N llamadas para auto-recuperarse
   - Smart Mode SOLO cuando ningún LLM responde en esa llamada
+
+Jerarquía de proveedores (configurable con LLM_PREFER):
+  1. Claude (Anthropic) — principal para CHAT + CODEGEN  [ANTHROPIC_API_KEY]
+  2. Groq               — fallback rápido               [GROQ_API_KEY]
+  3. Ollama             — fallback local sin internet    [OLLAMA_BASE_URL]
 """
 
 import json
@@ -18,6 +23,250 @@ import urllib.error
 import os
 import sys
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  CLIENTE ANTHROPIC (Claude)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class AnthropicClient:
+    """
+    Cliente para la API de Anthropic (Claude).
+    Usa claude-sonnet-4-5 por defecto — el mejor modelo para CodeGen.
+    Interfaz compatible con GroqClient y OllamaClient.
+    """
+
+    ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+    ANTHROPIC_VERSION = "2023-06-01"
+
+    # Modelos disponibles en orden de preferencia
+    MODELS = [
+        "claude-sonnet-4-5",           # Mejor calidad, ideal para CodeGen
+        "claude-haiku-4-5-20251001",   # Más rápido, ideal para chat rápido
+    ]
+
+    def __init__(self):
+        self.api_key     = os.environ.get('ANTHROPIC_API_KEY', '').strip()
+        self.model       = os.environ.get('ANTHROPIC_MODEL', self.MODELS[0])
+        self.available   = False
+        self._fail_count = 0
+        self._MAX_FAILS  = 3
+        self.check()
+
+    def check(self):
+        """
+        Verifica si Anthropic está disponible con un mini mensaje real.
+        Usa max_tokens=5 para ser lo más ligero posible.
+        """
+        if not self.api_key:
+            print("⚠️  ANTHROPIC_API_KEY no encontrada — obtén una en https://console.anthropic.com", flush=True)
+            self.available = False
+            return False
+        try:
+            payload = json.dumps({
+                "model":      self.model,
+                "max_tokens": 5,
+                "messages":   [{"role": "user", "content": "hi"}]
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                self.ANTHROPIC_API_URL,
+                data=payload,
+                headers={
+                    "Content-Type":      "application/json",
+                    "x-api-key":         self.api_key,
+                    "anthropic-version": self.ANTHROPIC_VERSION,
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                if r.status == 200:
+                    self.available   = True
+                    self._fail_count = 0
+                    print(f"✓ Anthropic/Claude disponible — modelo: {self.model}", flush=True)
+                    return True
+                else:
+                    print(f"⚠️  Anthropic error: HTTP {r.status}", flush=True)
+                    self.available = False
+                    return False
+        except urllib.error.HTTPError as e:
+            body = ''
+            try: body = e.read().decode('utf-8')[:200]
+            except: pass
+            print(f"⚠️  Anthropic no disponible: HTTP {e.code} — {body}", flush=True)
+            self.available = False
+            return False
+        except Exception as e:
+            print(f"⚠️  Anthropic no disponible: {e}", flush=True)
+            self.available = False
+            return False
+
+    def _convert_messages(self, messages: list):
+        """
+        Convierte mensajes al formato Anthropic.
+        Separa el system prompt de los mensajes user/assistant.
+        Retorna (system_str, messages_list).
+        """
+        system_parts = []
+        chat_msgs    = []
+
+        for m in messages:
+            role    = m.get("role", "user")
+            content = m.get("content", "")
+
+            if role == "system":
+                if isinstance(content, str):
+                    system_parts.append(content)
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            system_parts.append(block.get("text", ""))
+            elif role in ("user", "assistant"):
+                if isinstance(content, list):
+                    # Multimodal (imagen + texto) — convertir image_url → bloque Anthropic
+                    blocks = []
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "text":
+                            blocks.append({"type": "text", "text": block["text"]})
+                        elif block.get("type") == "image_url":
+                            url_info = block.get("image_url", {})
+                            url_str  = url_info.get("url", "")
+                            if url_str.startswith("data:"):
+                                try:
+                                    media_type, b64 = url_str.split(";base64,", 1)
+                                    media_type = media_type.replace("data:", "")
+                                    blocks.append({
+                                        "type":   "image",
+                                        "source": {
+                                            "type":       "base64",
+                                            "media_type": media_type,
+                                            "data":       b64,
+                                        }
+                                    })
+                                except Exception:
+                                    blocks.append({"type": "text", "text": "[imagen]"})
+                            else:
+                                blocks.append({
+                                    "type":   "image",
+                                    "source": {"type": "url", "url": url_str}
+                                })
+                    chat_msgs.append({"role": role, "content": blocks})
+                else:
+                    chat_msgs.append({"role": role, "content": str(content)})
+
+        # Anthropic exige que los mensajes alternen user/assistant
+        # y que el primero sea "user". Fusionar turnos consecutivos del mismo rol.
+        fixed     = []
+        last_role = None
+        for m in chat_msgs:
+            r = m["role"]
+            if r == last_role and fixed:
+                prev = fixed[-1]
+                if isinstance(prev["content"], str) and isinstance(m["content"], str):
+                    prev["content"] += "\n" + m["content"]
+                elif isinstance(prev["content"], list) and isinstance(m["content"], str):
+                    prev["content"].append({"type": "text", "text": m["content"]})
+                else:
+                    fixed.append(m)
+                    last_role = r
+            else:
+                fixed.append(m)
+                last_role = r
+
+        # Si empieza con assistant, insertar un user vacío
+        if fixed and fixed[0]["role"] == "assistant":
+            fixed.insert(0, {"role": "user", "content": "..."})
+
+        system_str = "\n\n".join(system_parts) if system_parts else ""
+        return system_str, fixed
+
+    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 8192,
+             model_override: str = None) -> str:
+        """
+        Envía mensajes a Claude.
+        - model_override: modelo específico para esta llamada
+        - Soporta mensajes multimodales (imagen + texto)
+        """
+        if not self.available:
+            return None
+
+        model_to_use = model_override or self.model
+
+        # Temperatura más baja para CodeGen (más determinismo)
+        if max_tokens >= 4096:
+            temperature = min(temperature, 0.3)
+
+        system_str, chat_msgs = self._convert_messages(messages)
+        if not chat_msgs:
+            return None
+
+        payload = {
+            "model":       model_to_use,
+            "max_tokens":  max_tokens,
+            "temperature": temperature,
+            "messages":    chat_msgs,
+        }
+        if system_str:
+            payload["system"] = system_str
+
+        # Timeout más largo para CodeGen
+        timeout = 300 if max_tokens > 4000 else 90
+
+        try:
+            req = urllib.request.Request(
+                self.ANTHROPIC_API_URL,
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers={
+                    "Content-Type":      "application/json",
+                    "x-api-key":         self.api_key,
+                    "anthropic-version": self.ANTHROPIC_VERSION,
+                }
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data   = json.loads(r.read().decode("utf-8"))
+                blocks = data.get("content", [])
+                parts  = [b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text"]
+                result = "\n".join(parts).strip()
+                if result:
+                    self._fail_count = 0
+                    return result
+                return None
+        except urllib.error.HTTPError as e:
+            body = ''
+            try: body = e.read().decode('utf-8')[:300]
+            except: pass
+            print(f"[Anthropic] HTTP Error {e.code}: {body}", flush=True)
+            if e.code == 429:
+                print("[Anthropic] Rate limit — esperando...", flush=True)
+                return None
+            self._fail_count += 1
+            if self._fail_count >= self._MAX_FAILS:
+                print(f"[Anthropic] {self._MAX_FAILS} fallos consecutivos — marcando no disponible temporalmente", flush=True)
+                self.available = False
+            return None
+        except Exception as e:
+            print(f"[Anthropic] Error en chat: {e}", flush=True)
+            self._fail_count += 1
+            if self._fail_count >= self._MAX_FAILS:
+                self.available = False
+            return None
+
+    def chat_codegen(self, messages: list, temperature: float = 0.2,
+                     max_tokens: int = 16000) -> str:
+        """
+        Variante optimizada para generación de código.
+        Temperatura baja = código más determinista y correcto.
+        max_tokens alto = archivos completos sin cortes.
+        """
+        return self.chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+    def generate(self, prompt: str, temperature: float = 0.3) -> str:
+        messages = [{"role": "user", "content": prompt}]
+        return self.chat(messages, temperature)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  CLIENTE GROQ (original intacto)
+# ──────────────────────────────────────────────────────────────────────────────
 
 class GroqClient:
     """Cliente para Groq Cloud API"""
@@ -90,6 +339,8 @@ class GroqClient:
         if not self.available:
             return None
         model_to_use = model_override or self.model
+        # Groq tiene límite de 8000 tokens de salida
+        max_tokens = min(max_tokens, 8000)
         payload = {
             'model':       model_to_use,
             'messages':    messages,
@@ -137,6 +388,10 @@ class GroqClient:
         messages = [{"role": "user", "content": prompt}]
         return self.chat(messages, temperature)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  CLIENTE OLLAMA (original intacto)
+# ──────────────────────────────────────────────────────────────────────────────
 
 class OllamaClient:
     """
@@ -242,28 +497,48 @@ class OllamaClient:
             return None
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+#  CLIENTE UNIFICADO
+# ──────────────────────────────────────────────────────────────────────────────
+
 class UnifiedLLMClient:
     """
     Cliente unificado con disponibilidad DINÁMICA.
 
-    Ambos clientes se inicializan siempre.
+    Los tres clientes se inicializan siempre.
     En cada llamada:
-      1. Intenta el preferido (por defecto Groq, configurable con LLM_PREFER=ollama)
-      2. Si falla o no está disponible → intenta el otro automáticamente
-      3. Si ninguno responde → retorna None → brain activa Smart Mode para esa llamada
+      1. Intenta el preferido (por defecto Claude, configurable con LLM_PREFER)
+      2. Si falla o no está disponible → intenta los siguientes en orden
+      3. Si ninguno responde → retorna None → brain activa Smart Mode
 
-    Auto-recuperación: cada RECHECK_EVERY llamadas vuelve a chequear disponibilidad,
-    por si Groq recuperó créditos o Ollama fue levantado.
+    Orden de preferencia por defecto:
+      claude → groq → ollama
+
+    Configurable con LLM_PREFER=groq o LLM_PREFER=ollama
+
+    Auto-recuperación: cada RECHECK_EVERY llamadas vuelve a chequear disponibilidad.
+
+    Variables de entorno:
+      ANTHROPIC_API_KEY  → habilita Claude (console.anthropic.com)
+      GROQ_API_KEY       → habilita Groq   (console.groq.com — gratis)
+      OLLAMA_BASE_URL    → habilita Ollama local (default: http://127.0.0.1:11434)
+      LLM_PREFER         → claude | groq | ollama  (default: claude)
     """
     
     RECHECK_EVERY = 20   # re-chequear disponibilidad cada 20 llamadas
     
     def __init__(self):
-        self.groq   = None
-        self.ollama = None
+        self.anthropic   = None
+        self.groq        = None
+        self.ollama      = None
         self._call_count = 0
 
-        # Inicializar AMBOS siempre
+        # Inicializar los TRES siempre
+        try:
+            self.anthropic = AnthropicClient()
+        except Exception as e:
+            print(f"⚠️  No se pudo instanciar AnthropicClient: {e}", flush=True)
+
         try:
             self.groq = GroqClient()
         except Exception as e:
@@ -275,35 +550,43 @@ class UnifiedLLMClient:
             print(f"⚠️  No se pudo instanciar OllamaClient: {e}", flush=True)
 
         # Orden de preferencia (configurable)
-        prefer = os.environ.get('LLM_PREFER', 'groq').lower()
-        if prefer == 'ollama':
-            self._order = [self.ollama, self.groq]
-            self._names = ['Ollama', 'Groq']
+        prefer = os.environ.get('LLM_PREFER', 'claude').lower()
+        if prefer == 'groq':
+            self._order = [self.groq, self.anthropic, self.ollama]
+            self._names = ['Groq', 'Claude', 'Ollama']
+        elif prefer == 'ollama':
+            self._order = [self.ollama, self.anthropic, self.groq]
+            self._names = ['Ollama', 'Claude', 'Groq']
         else:
-            self._order = [self.groq, self.ollama]
-            self._names = ['Groq', 'Ollama']
+            # Por defecto: Claude primero
+            self._order = [self.anthropic, self.groq, self.ollama]
+            self._names = ['Claude', 'Groq', 'Ollama']
 
         self._log_status()
     
     def _log_status(self):
-        groq_ok   = self.groq   and self.groq.available
-        ollama_ok = self.ollama and self.ollama.available
-        
-        if groq_ok and ollama_ok:
-            print(f"✓ LLM: Groq ✅ + Ollama ✅ (ambos disponibles, usando {self._names[0]} primero)", flush=True)
-        elif groq_ok:
-            print(f"✓ LLM activo: Groq/{self.groq.model}", flush=True)
-        elif ollama_ok:
-            print(f"✓ LLM activo: Ollama/{self.ollama.model}", flush=True)
+        claude_ok = self.anthropic and self.anthropic.available
+        groq_ok   = self.groq      and self.groq.available
+        ollama_ok = self.ollama    and self.ollama.available
+
+        activos = []
+        if claude_ok: activos.append(f"Claude/{self.anthropic.model}")
+        if groq_ok:   activos.append(f"Groq/{self.groq.model}")
+        if ollama_ok: activos.append(f"Ollama/{self.ollama.model}")
+
+        if activos:
+            print(f"✓ LLM activo: {' + '.join(activos)} (preferido: {self._names[0]})", flush=True)
         else:
             print("⚠️  Sin LLM disponible — NEXUS funcionará en Smart Mode", flush=True)
     
     @property
     def available(self) -> bool:
         """True si AL MENOS UNO está disponible."""
-        groq_ok   = bool(self.groq   and self.groq.available)
-        ollama_ok = bool(self.ollama and self.ollama.available)
-        return groq_ok or ollama_ok
+        return (
+            bool(self.anthropic and self.anthropic.available) or
+            bool(self.groq      and self.groq.available)      or
+            bool(self.ollama    and self.ollama.available)
+        )
     
     @property
     def model(self) -> str:
@@ -319,32 +602,33 @@ class UnifiedLLMClient:
         self._call_count += 1
         if self._call_count % self.RECHECK_EVERY == 0:
             changed = False
-            if self.groq:
-                was = self.groq.available
-                self.groq.check()
-                if self.groq.available != was:
-                    changed = True
-            if self.ollama:
-                was = self.ollama.available
-                self.ollama.check()
-                if self.ollama.available != was:
-                    changed = True
+            for client in [self.anthropic, self.groq, self.ollama]:
+                if client:
+                    was = client.available
+                    client.check()
+                    if client.available != was:
+                        changed = True
             if changed:
                 print("[LLM] Estado de disponibilidad cambió:", flush=True)
                 self._log_status()
 
     def _try_in_order(self, method: str, *args, **kwargs) -> str:
         """
-        Llama al método (chat/generate) en el orden de preferencia.
-        Si el primero falla o no está disponible, prueba el segundo.
+        Llama al método (chat/generate/chat_codegen) en el orden de preferencia.
+        Si el primero falla o no está disponible, prueba el siguiente.
         """
         self._maybe_recheck()
 
         for client, name in zip(self._order, self._names):
             if not client or not client.available:
                 continue
+            # chat_codegen solo existe en AnthropicClient
+            # Para Groq/Ollama usar chat normal con los mismos args
+            actual_method = method
+            if method == 'chat_codegen' and not hasattr(client, 'chat_codegen'):
+                actual_method = 'chat'
             try:
-                result = getattr(client, method)(*args, **kwargs)
+                result = getattr(client, actual_method)(*args, **kwargs)
                 if result is not None:
                     return result
                 print(f"[LLM] {name} retornó None → probando siguiente...", flush=True)
@@ -352,7 +636,7 @@ class UnifiedLLMClient:
                 # El cliente no soporta algún kwarg (ej. model_override en Ollama) — intentar sin él
                 try:
                     filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'model_override'}
-                    result = getattr(client, method)(*args, **filtered_kwargs)
+                    result = getattr(client, actual_method)(*args, **filtered_kwargs)
                     if result is not None:
                         return result
                 except Exception as e2:
@@ -362,29 +646,54 @@ class UnifiedLLMClient:
 
         return None
 
-    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 600,
+    def chat(self, messages: list, temperature: float = 0.7, max_tokens: int = 8192,
              model_override: str = None) -> str:
         return self._try_in_order('chat', messages, temperature, max_tokens, model_override=model_override)
-    
+
+    def chat_codegen(self, messages: list, temperature: float = 0.2,
+                     max_tokens: int = 16000) -> str:
+        """
+        Variante optimizada para CodeGen.
+        Prioriza Claude Sonnet — si no está disponible cae a Groq/Ollama con chat normal.
+        Temperatura baja = código correcto y determinista.
+        max_tokens alto = archivos completos sin cortes.
+        """
+        return self._try_in_order('chat_codegen', messages, temperature, max_tokens)
+
     def generate(self, prompt: str, temperature: float = 0.3) -> str:
         return self._try_in_order('generate', prompt, temperature)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+#  TEST
+# ──────────────────────────────────────────────────────────────────────────────
+
 if __name__ == '__main__':
-    print("=== Test UnifiedLLMClient (disponibilidad dinámica) ===")
+    print("=== Test UnifiedLLMClient (Claude + Groq + Ollama) ===")
     client = UnifiedLLMClient()
     print(f"\n✓ Disponible: {client.available}")
     print(f"✓ Modelo activo: {client.model}\n")
 
     if client.available:
+        # Test chat general
         response = client.generate("Di 'Hola' en 5 idiomas diferentes")
         print(f"Generate test:\n{response}\n")
+
+        # Test chat con historial
         messages = [
             {"role": "system",  "content": "Eres un asistente conciso."},
             {"role": "user",    "content": "¿Qué es una red neuronal en 20 palabras?"}
         ]
         response = client.chat(messages)
         print(f"Chat test:\n{response}\n")
+
+        # Test CodeGen
+        codegen_msgs = [
+            {"role": "system", "content": "Eres un experto en Python. Responde SOLO con código, sin explicaciones ni markdown."},
+            {"role": "user",   "content": "Escribe una función Python que calcule el factorial de n de forma recursiva."}
+        ]
+        response = client.chat_codegen(codegen_msgs, max_tokens=300)
+        print(f"CodeGen test:\n{response}\n")
     else:
         print("❌ No hay LLM disponible — Smart Mode activo")
-        print("Configura GROQ_API_KEY o levanta Ollama")
+        print("Configura ANTHROPIC_API_KEY, GROQ_API_KEY o levanta Ollama")

@@ -404,9 +404,14 @@ class ChunkedFileGenerator:
     def __init__(self, llm_client):
         self.llm = llm_client
 
-    def _llm_call(self, system: str, user: str, temperature: float = 0.3,
-                  max_tokens: int = 8000) -> str:
-        """Llamada directa al LLM con reintentos y detección de rechazo."""
+    def _llm_call(self, system: str, user: str, temperature: float = 0.2,
+                  max_tokens: int = 16000) -> str:
+        """
+        Llamada al LLM para CodeGen.
+        Usa chat_codegen() si está disponible (Claude Sonnet — mejor para código).
+        Fallback: chat() normal.
+        Temperatura baja (0.2) para código determinista y correcto.
+        """
         _REFUSAL_PHRASES = [
             "lo siento, pero no puedo", "no puedo proporcionar",
             "no tengo acceso al código", "sin el código original",
@@ -420,13 +425,16 @@ class ChunkedFileGenerator:
         ]
         for attempt in range(3):
             try:
-                result = self.llm.chat(messages, temperature=temperature, max_tokens=max_tokens)
+                # Usar chat_codegen si está disponible (optimizado para código)
+                if hasattr(self.llm, 'chat_codegen'):
+                    result = self.llm.chat_codegen(messages, temperature=temperature, max_tokens=max_tokens)
+                else:
+                    result = self.llm.chat(messages, temperature=temperature, max_tokens=max_tokens)
                 if result and result.strip():
                     result_lower = result.lower().strip()
                     is_refusal = any(p in result_lower for p in _REFUSAL_PHRASES)
                     if is_refusal and attempt < 2:
                         print(f"[ChunkedGen] Rechazo detectado en intento {attempt+1} — reintentando con override", file=sys.stderr, flush=True)
-                        # Reinyectar instrucción de override
                         messages = [
                             {"role": "system", "content": system + "\n\nRECUERDA: El código completo está en el mensaje del usuario. DEBES procesarlo y devolverlo modificado. NUNCA respondas que no puedes o que no tienes acceso."},
                             {"role": "user",   "content": user + "\n\nIMPORTANTE: Devuelve el archivo completo modificado ahora. Solo el código, sin explicaciones."}
@@ -1409,7 +1417,12 @@ class ResponseGenerator:
             messages.append({"role": "user", "content": enriched_message})
 
             # FIXED: max_tokens=8192 (era 600) — temperatura derivada del estado PAD
-            response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=8192)
+            # Para CodeGen usar chat_codegen si disponible (Claude Sonnet — mejor calidad)
+            _fgm = (user_context or {}).get('fileGenerationMode', False)
+            if _fgm and hasattr(self.llm, 'chat_codegen'):
+                response = self.llm.chat_codegen(messages, temperature=min(llm_temperature, 0.3), max_tokens=16000)
+            else:
+                response = self.llm.chat(messages, temperature=llm_temperature, max_tokens=8192)
 
             # ── Detector de respuestas de rechazo del LLM ────────────
             # Si el LLM activa sus filtros internos, NEXUS reintenta con
@@ -3716,7 +3729,10 @@ class NexusBrain:
                         f"Archivo: {file_name} ({total_lines} líneas)\n"
                         f"Pregunta: {message}\n\nCÓDIGO:\n{preview}"}
                 ]
-                response = self.llm.chat(msgs, temperature=0.3, max_tokens=4096)
+                if hasattr(self.llm, 'chat_codegen'):
+                    response = self.llm.chat_codegen(msgs, temperature=0.3, max_tokens=4096)
+                else:
+                    response = self.llm.chat(msgs, temperature=0.3, max_tokens=4096)
                 if not response:
                     response = f"No pude analizar el archivo '{file_name}' en este momento."
 
