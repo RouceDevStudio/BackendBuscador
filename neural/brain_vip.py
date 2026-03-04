@@ -3665,9 +3665,35 @@ class NexusBrain:
                 modified = self.file_gen.modify_file(file_content, message, file_name)
                 mod_lines = len(modified.split('\n'))
                 name_part = f" {u_name}" if u_name else ""
+
+                # Generar resumen REAL de cambios comparando original vs modificado
+                change_summary = message[:120]  # fallback
+                if self.llm and self.llm.available and modified and modified != file_content:
+                    try:
+                        orig_preview = '\n'.join(file_content.split('\n')[:30])
+                        mod_preview  = '\n'.join(modified.split('\n')[:30])
+                        sum_msgs = [
+                            {"role": "system", "content":
+                                "Eres un asistente técnico. Compara dos versiones de código y describe "
+                                "en 1-3 frases CONCRETAS qué cambió realmente. Sé específico: "
+                                "menciona funciones añadidas/eliminadas, parámetros cambiados, "
+                                "lógica nueva, etc. NO repitas la instrucción del usuario. "
+                                "Responde en español, máximo 150 caracteres."},
+                            {"role": "user", "content":
+                                f"Instrucción original: {message[:100]}\n"
+                                f"Archivo: {file_name} ({total_lines}→{mod_lines} líneas)\n"
+                                f"ANTES (primeras líneas):\n{orig_preview}\n\n"
+                                f"DESPUÉS (primeras líneas):\n{mod_preview}"}
+                        ]
+                        summary = self.llm.chat(sum_msgs, temperature=0.2, max_tokens=200)
+                        if summary and len(summary.strip()) > 10:
+                            change_summary = summary.strip()
+                    except Exception:
+                        pass
+
                 response = (
                     f"✅ Listo{name_part}! Modifiqué **{file_name}** ({total_lines} → {mod_lines} líneas).\n\n"
-                    f"**Cambios aplicados:** {message[:150]}\n\n"
+                    f"**Qué cambió:** {change_summary}\n\n"
                     f"__FILE_CONTENT__:{modified}"
                 )
 
