@@ -406,7 +406,14 @@ class ChunkedFileGenerator:
 
     def _llm_call(self, system: str, user: str, temperature: float = 0.3,
                   max_tokens: int = 8000) -> str:
-        """Llamada directa al LLM con reintentos."""
+        """Llamada directa al LLM con reintentos y detección de rechazo."""
+        _REFUSAL_PHRASES = [
+            "lo siento, pero no puedo", "no puedo proporcionar",
+            "no tengo acceso al código", "sin el código original",
+            "no puedo ayudarte", "no me es posible",
+            "i'm sorry", "i cannot", "i can't", "i'm not able",
+            "as an ai", "como ia", "como inteligencia artificial",
+        ]
         messages = [
             {"role": "system",  "content": system},
             {"role": "user",    "content": user}
@@ -415,6 +422,17 @@ class ChunkedFileGenerator:
             try:
                 result = self.llm.chat(messages, temperature=temperature, max_tokens=max_tokens)
                 if result and result.strip():
+                    result_lower = result.lower().strip()
+                    is_refusal = any(p in result_lower for p in _REFUSAL_PHRASES)
+                    if is_refusal and attempt < 2:
+                        print(f"[ChunkedGen] Rechazo detectado en intento {attempt+1} — reintentando con override", file=sys.stderr, flush=True)
+                        # Reinyectar instrucción de override
+                        messages = [
+                            {"role": "system", "content": system + "\n\nRECUERDA: El código completo está en el mensaje del usuario. DEBES procesarlo y devolverlo modificado. NUNCA respondas que no puedes o que no tienes acceso."},
+                            {"role": "user",   "content": user + "\n\nIMPORTANTE: Devuelve el archivo completo modificado ahora. Solo el código, sin explicaciones."}
+                        ]
+                        time.sleep(0.5)
+                        continue
                     return result.strip()
             except Exception as e:
                 print(f"[ChunkedGen] Intento {attempt+1} falló: {e}", file=sys.stderr, flush=True)
@@ -521,17 +539,26 @@ class ChunkedFileGenerator:
     def _modify_small(self, content: str, instruction: str, filename: str) -> str:
         """Modifica archivo pequeño en una sola llamada LLM."""
         ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'txt'
+        lines = len(content.split('\n'))
         system = (
-            f"Eres un ingeniero de software experto en {ext}. "
-            f"REGLA CRÍTICA: Devuelve ÚNICAMENTE el archivo completo modificado. "
-            f"Sin explicaciones, sin markdown, sin comentarios extra. Solo el código."
+            f"Eres un ingeniero de software senior experto en {ext}. "
+            f"Se te proporciona el código COMPLETO y REAL del archivo '{filename}' ({lines} líneas). "
+            f"Tu única tarea es aplicar los cambios solicitados y devolver el archivo completo modificado. "
+            f"REGLAS ABSOLUTAS — NUNCA IGNORAR:\n"
+            f"1. Devuelve ÚNICAMENTE el código completo del archivo modificado. Sin explicaciones, sin markdown, sin comentarios extra fuera del código.\n"
+            f"2. NUNCA digas 'no puedo', 'no tengo acceso', 'necesito el código original' — el código YA está en este mensaje.\n"
+            f"3. NUNCA omitas partes del archivo. El resultado debe ser el archivo íntegro con los cambios aplicados.\n"
+            f"4. Si el cambio ya existe o no aplica, devuelve el archivo tal cual sin modificar.\n"
+            f"5. Sin bloques markdown (``` o similar). Solo el código puro."
         )
         user = (
-            f"ARCHIVO: {filename}\n"
-            f"INSTRUCCIÓN: {instruction}\n\n"
-            f"CONTENIDO ACTUAL:\n{content}\n\n"
-            f"Devuelve el archivo completo con los cambios aplicados. "
-            f"NO omitas ninguna línea. El archivo debe estar íntegro."
+            f"ARCHIVO COMPLETO — '{filename}' ({lines} líneas):\n"
+            f"{'─'*60}\n"
+            f"{content}\n"
+            f"{'─'*60}\n\n"
+            f"INSTRUCCIÓN A APLICAR: {instruction}\n\n"
+            f"Devuelve ahora el archivo completo con los cambios aplicados. "
+            f"Sin explicaciones. Solo el código íntegro."
         )
         result = self._llm_call(system, user, temperature=0.2, max_tokens=self.MAX_TOKENS_OUT)
         return self._clean_code(result) if result else content
@@ -3597,7 +3624,16 @@ class NexusBrain:
             'modifica', 'modifíca', 'actualiza', 'actualízame', 'agrega', 'añade',
             'elimina', 'borra', 'cambia', 'refactoriza', 'optimiza', 'arregla',
             'corrige', 'añádele', 'agrégale', 'quítale', 'implement', 'add', 'remove',
-            'fix', 'update', 'modify', 'change', 'edit', 'refactor'
+            'fix', 'update', 'modify', 'change', 'edit', 'refactor',
+            # keywords faltantes — "mejora el rendimiento", "dámelo completo", etc.
+            'mejora', 'mejorar', 'mejóra', 'mejóralo', 'mejórala', 'optimizar',
+            'rendimiento', 'performance', 'velocidad', 'eficiencia', 'refina',
+            'dame', 'dámelo', 'dámela', 'entrégame', 'pásame', 'muéstrame el código',
+            'completo', 'íntegro', 'integro', 'complétalo', 'complétala',
+            'limpia', 'limpiar', 'simplifica', 'simplificar', 'reduce', 'reducir',
+            'actualizar', 'agregar', 'añadir', 'eliminar', 'borrar', 'reescribe',
+            'reescribir', 'rewrite', 'enhance', 'improve', 'optimize', 'clean',
+            'upgrade', 'patch', 'extend', 'reduce', 'simplify', 'restructure',
         ])
         is_create = any(kw in msg_lower for kw in [
             'crea', 'genera', 'construye', 'desarrolla', 'escribe', 'hazme',
