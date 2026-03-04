@@ -1112,6 +1112,92 @@ app.post('/api/chat-with-file', requireAuth, async (req, res) => {
 //  GENERACIÓN DE ARCHIVOS (código, docs, etc.) — SIN LÍMITE
 // ══════════════════════════════════════════════════════════════════
 
+// ── Helper: llama directamente a Anthropic o Groq para CodeGen ─────────────
+// Bypasa el brain Python — genera código puro de alta calidad sin filtros de chat
+async function codegenLLMCall(systemPrompt, userPrompt, maxTokens = 12000) {
+    const https          = require('https');
+    const anthropicKey   = process.env.ANTHROPIC_API_KEY;
+    const groqKey        = process.env.GROQ_API_KEY;
+
+    function httpsPost(hostname, path, headers, body, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const req = https.request({ hostname, path, method: 'POST', headers, timeout: timeoutMs },
+                (res) => { let d = ''; res.on('data', c => d += c); res.on('end', () => resolve({ status: res.statusCode, data: d })); }
+            );
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+            req.write(body); req.end();
+        });
+    }
+
+    // 1. Anthropic Claude Sonnet — mejor calidad para CodeGen
+    if (anthropicKey) {
+        try {
+            const body = JSON.stringify({
+                model: 'claude-sonnet-4-5', max_tokens: maxTokens, temperature: 0.2,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userPrompt }]
+            });
+            const resp = await httpsPost('api.anthropic.com', '/v1/messages', {
+                'Content-Type': 'application/json',
+                'x-api-key': anthropicKey,
+                'anthropic-version': '2023-06-01',
+                'Content-Length': Buffer.byteLength(body)
+            }, body, 300000);
+            if (resp.status === 200) {
+                const parsed = JSON.parse(resp.data);
+                const text   = (parsed.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+                if (text && text.trim()) { console.log(`[CodeGen] Claude OK — ${text.length} chars`); return text.trim(); }
+            } else { console.warn(`[CodeGen] Anthropic HTTP ${resp.status}: ${resp.data.slice(0,150)}`); }
+        } catch(e) { console.warn(`[CodeGen] Anthropic error: ${e.message}`); }
+    }
+
+    // 2. Fallback: Groq
+    if (groqKey) {
+        try {
+            const body = JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                max_tokens: Math.min(maxTokens, 8000),
+                temperature: 0.2,
+                messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }]
+            });
+            const resp = await httpsPost('api.groq.com', '/openai/v1/chat/completions', {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${groqKey}`,
+                'Content-Length': Buffer.byteLength(body)
+            }, body, 120000);
+            if (resp.status === 200) {
+                const text = JSON.parse(resp.data).choices?.[0]?.message?.content || '';
+                if (text && text.trim()) { console.log(`[CodeGen] Groq OK — ${text.length} chars`); return text.trim(); }
+            } else { console.warn(`[CodeGen] Groq HTTP ${resp.status}: ${resp.data.slice(0,150)}`); }
+        } catch(e) { console.warn(`[CodeGen] Groq error: ${e.message}`); }
+    }
+
+    console.error('[CodeGen] Todos los proveedores fallaron — configura ANTHROPIC_API_KEY o GROQ_API_KEY');
+    return null;
+}
+
+// ── Helper: limpia bloques markdown del contenido generado ──────────────────
+function cleanCodeOutput(text) {
+    if (!text) return '';
+    const single = text.match(/^```[\w]*\n?([\s\S]*?)\n?```\s*$/);
+    if (single) return single[1].trim();
+    const blocks = [...text.matchAll(/```[\w]*\n?([\s\S]*?)\n?```/g)].map(b => b[1]);
+    if (blocks.length > 0) return blocks.sort((a, b) => b.length - a.length)[0].trim();
+    return text.trim();
+}
+
+const SYS_CODEGEN = `Eres NEXUS, un experto generador de código creado por Jhonatan David Castro Galviz.
+REGLAS ABSOLUTAS — NUNCA ROMPER:
+1. Genera ÚNICAMENTE el contenido del archivo solicitado. Código puro, completo y funcional.
+2. NUNCA uses bloques markdown (\`\`\`). Solo el contenido del archivo, sin envoltorios.
+3. NUNCA pongas explicaciones, comentarios meta, ni texto fuera del código.
+4. NUNCA uses TODOs, placeholders, ni comentarios como "// agregar aquí".
+5. El archivo debe funcionar TAL COMO SE GENERA, sin ninguna modificación.
+6. Si es HTML: incluye DOCTYPE, head completo, body completo, CSS y JS necesarios.
+7. Si es JS/Python/etc: código real y completo, no esqueletos ni stubs.
+8. Longitud: genera tanto código como sea necesario para que el archivo sea COMPLETO.`;
+
 // POST /api/generate-project — genera proyecto completo multi-archivo
 app.post('/api/generate-project', requireAuth, async (req, res) => {
     if (!checkRateLimit(req, res, 10, 60000)) return;
@@ -1126,9 +1212,7 @@ app.post('/api/generate-project', requireAuth, async (req, res) => {
     const isCreator = isCreatorAccount(userEmail);
     const isVip     = user?.isVip || isVipAccount(userEmail);
     const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
-    const activeBrain = useVipBrain ? brainVip : brainBase;
 
-    // ── Límite diario para plan Free ───────────────────────────────
     if (!useVipBrain) {
         const genToday = getFreeGenToday(userId);
         if (genToday >= FREE_GEN_PER_DAY) {
@@ -1137,7 +1221,6 @@ app.post('/api/generate-project', requireAuth, async (req, res) => {
                 limitReached: true, genUsed: genToday, genLimit: FREE_GEN_PER_DAY
             });
         }
-        // Cuenta como 1 uso el proyecto completo (no por archivo)
         incrementFreeGen(userId);
         console.log(`[Free] generate-project — ${getFreeGenToday(userId)}/${FREE_GEN_PER_DAY} usos hoy (user: ${userId})`);
     }
@@ -1155,82 +1238,49 @@ app.post('/api/generate-project', requireAuth, async (req, res) => {
         extension: ['manifest.json','popup.html','popup.js','background.js','style.css'],
     };
 
-    // Plan free: limitar a 3 archivos por proyecto (Ultra: hasta 10)
     const MAX_PROJECT_FILES = useVipBrain ? 10 : 3;
-
-    const cat      = category || 'web';
+    const cat       = category || 'web';
     const baseFiles = (FILE_MAPS[cat] || FILE_MAPS['web']).slice(0, MAX_PROJECT_FILES);
-    const pName    = projectName || 'mi_proyecto';
+    const pName     = projectName || 'mi_proyecto';
 
     console.log(`🚀 [generate-project] cat:${cat} name:${pName} plan:${planStatus.plan} prompt:${prompt.slice(0,80)}`);
 
     try {
         // Paso 1: decidir estructura de archivos
-        const planPrompt = `Eres un arquitecto de software experto. El usuario quiere crear el siguiente proyecto:
+        const planSys  = `Eres un arquitecto de software. Responde ÚNICAMENTE con JSON válido, sin markdown ni explicaciones.`;
+        const planUser = `Proyecto:\nCATEGORÍA: ${cat}\nNOMBRE: ${pName}\nDESCRIPCIÓN: ${prompt}\nSUGERIDOS: ${baseFiles.join(', ')}\nMÁXIMO: ${MAX_PROJECT_FILES} archivos\n\nResponde solo: {"files": ["archivo1.ext", "archivo2.ext"]}`;
 
-CATEGORÍA: ${cat}
-NOMBRE: ${pName}
-DESCRIPCIÓN: ${prompt}
-ARCHIVOS BASE SUGERIDOS: ${baseFiles.join(', ')}
-MÁXIMO DE ARCHIVOS: ${MAX_PROJECT_FILES}
-
-Responde ÚNICAMENTE con JSON válido, sin explicaciones:
-{"files": ["index.html", "game.js", "style.css"]}`;
-
-        const planThought = await activeBrain.process(planPrompt, [], null, {
-            userId, email: userEmail, isVip, isCreator, plan: planStatus.plan,
-            fileGenerationMode: true
-        });
         let fileList = baseFiles;
-        try {
-            const raw = planThought.response || planThought.message || '';
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                if (Array.isArray(parsed.files) && parsed.files.length > 0) {
-                    fileList = parsed.files.slice(0, MAX_PROJECT_FILES);
+        const planRaw = await codegenLLMCall(planSys, planUser, 200);
+        if (planRaw) {
+            try {
+                const m = planRaw.match(/\{[\s\S]*\}/);
+                if (m) {
+                    const p = JSON.parse(m[0]);
+                    if (Array.isArray(p.files) && p.files.length > 0) fileList = p.files.slice(0, MAX_PROJECT_FILES);
                 }
-            }
-        } catch(e) { /* usar lista base */ }
-
+            } catch(e) { /* usar lista base */ }
+        }
         console.log(`[generate-project] Archivos: ${fileList.join(', ')}`);
 
-        // Paso 2: generar cada archivo completo
+        // Paso 2: generar cada archivo completo — directo al LLM
         const generatedFiles = [];
         for (const fileName of fileList) {
-            const ext = fileName.split('.').pop().toLowerCase();
-            const filePrompt = `PROYECTO: ${pName} (categoría: ${cat})
-DESCRIPCIÓN COMPLETA: ${prompt}
-ARCHIVOS DEL PROYECTO: ${fileList.join(', ')}
-ARCHIVOS YA GENERADOS: ${generatedFiles.map(f => f.name).join(', ') || 'ninguno aún'}
+            const done = generatedFiles.map(f => f.name).join(', ') || 'ninguno';
+            const userMsg = `PROYECTO: "${pName}" (${cat})
+DESCRIPCIÓN: ${prompt}
+TODOS LOS ARCHIVOS: ${fileList.join(', ')}
+YA GENERADOS: ${done}
 
-TAREA: Genera el archivo "${fileName}" COMPLETO Y FUNCIONAL.
-REGLAS: Solo el contenido del archivo. Sin markdown fences. Sin TODOs. Sin placeholders.
-Genera "${fileName}" ahora:`;
+GENERA AHORA EL ARCHIVO: ${fileName}
+Código completo y funcional. Sin markdown. Sin explicaciones. Solo el contenido del archivo.`;
 
-            const fileThought = await activeBrain.process(filePrompt, [], null, {
-                userId, email: userEmail, isVip, isCreator, plan: planStatus.plan,
-                fileGenerationMode: true, unlimitedOutput: useVipBrain,
-                fileName: fileName,
-                hasFile: false,
-                fileContent: '',
-                fileType: ext
-            });
+            const raw     = await codegenLLMCall(SYS_CODEGEN, userMsg, 12000);
+            let content   = cleanCodeOutput(raw || '');
 
-            let content = '';
-            // Primero intentar file_content (devuelto por _handle_file_operation)
-            if (fileThought.file_content && fileThought.file_content.trim()) {
-                content = fileThought.file_content;
-            } else {
-                content = fileThought.response || fileThought.message || '';
-                // Limpiar markdown fences
-                const codeMatch = content.match(/```[\w]*\n?([\s\S]*?)```/s);
-                if (codeMatch) content = codeMatch[1].trim();
-            }
-            // Si sigue vacío, loguear y poner fallback descriptivo
-            if (!content.trim()) {
-                console.error(`[generate-project] ⚠️ Contenido vacío para ${fileName}`);
-                content = `/* NEXUS: Error generando ${fileName} — reintenta con un prompt más detallado */`;
+            if (!content || content.length < 10) {
+                content = `/* NEXUS CodeGen: Error generando ${fileName}. Reintenta con descripción más detallada. */`;
+                console.error(`[generate-project] ⚠️ Sin contenido para ${fileName}`);
             }
 
             let downloadUrl = null;
@@ -1243,7 +1293,7 @@ Genera "${fileName}" ahora:`;
             } catch(e) { console.error('[generate-project] save error:', e.message); }
 
             generatedFiles.push({ name: fileName, content, downloadUrl, lines: content.split('\n').length });
-            console.log(`[generate-project] ✓ ${fileName} (${content.split('\n').length} líneas)`);
+            console.log(`[generate-project] ✓ ${fileName} — ${content.split('\n').length} líneas`);
         }
 
         res.json({
@@ -1259,7 +1309,7 @@ Genera "${fileName}" ahora:`;
     }
 });
 
-// POST /api/generate-file — genera archivo de cualquier tipo y tamaño
+// POST /api/generate-file — genera / edita / corrige / analiza un archivo
 app.post('/api/generate-file', requireAuth, async (req, res) => {
     if (!checkRateLimit(req, res, 20, 60000)) return;
     const { prompt, fileType, fileName, currentContent, operation } = req.body;
@@ -1273,9 +1323,7 @@ app.post('/api/generate-file', requireAuth, async (req, res) => {
     const isCreator = isCreatorAccount(userEmail);
     const isVip     = user?.isVip || isVipAccount(userEmail);
     const useVipBrain = isCreator || isVip || planStatus.plan === 'premium';
-    const activeBrain = useVipBrain ? brainVip : brainBase;
 
-    // ── Límite diario de generaciones para plan Free ───────────────
     if (!useVipBrain) {
         const genToday = getFreeGenToday(userId);
         if (genToday >= FREE_GEN_PER_DAY) {
@@ -1288,78 +1336,56 @@ app.post('/api/generate-file', requireAuth, async (req, res) => {
         console.log(`[Free] generate-file — ${getFreeGenToday(userId)}/${FREE_GEN_PER_DAY} usos hoy (user: ${userId})`);
     }
 
-    // Operaciones: 'create' | 'edit' | 'analyze' | 'fix' | 'extend'
     const op = operation || 'create';
+    let systemPrompt, userPrompt;
 
-    let enrichedPrompt;
-    if (op === 'edit' && currentContent) {
-        enrichedPrompt = `OPERACIÓN: EDITAR ARCHIVO EXISTENTE
-ARCHIVO: ${fileName || 'archivo'}
-TIPO: ${fileType || 'texto'}
+    if (op === 'analyze' && currentContent) {
+        systemPrompt = `Eres NEXUS, experto analista de código creado por Jhonatan David Castro Galviz. Analiza código con detalle técnico. Responde en español de forma clara y estructurada.`;
+        userPrompt   = `Analiza este archivo (${fileName || 'archivo'}, ${currentContent.split('\n').length} líneas):\nPREGUNTA: ${prompt}\n\nCÓDIGO:\n${currentContent}`;
+    } else if ((op === 'edit' || op === 'fix') && currentContent) {
+        const opLabel = op === 'fix' ? 'CORRIGE ERRORES EN' : 'EDITA';
+        systemPrompt = SYS_CODEGEN;
+        userPrompt   = `${opLabel} ESTE ARCHIVO: ${fileName || 'archivo'}
 INSTRUCCIÓN: ${prompt}
 
-CONTENIDO ACTUAL DEL ARCHIVO (${currentContent.split('\n').length} líneas):
-\`\`\`
-${currentContent}
-\`\`\`
-
-IMPORTANTE: Devuelve SOLO el archivo completo con las modificaciones aplicadas. No omitas ninguna línea. El archivo debe estar íntegro y funcional.`;
-    } else if (op === 'analyze' && currentContent) {
-        enrichedPrompt = `ANALIZA este archivo (${fileName || 'archivo'}, ${currentContent.split('\n').length} líneas) y responde: ${prompt}\n\nCONTENIDO:\n\`\`\`\n${currentContent}\n\`\`\``;
-    } else if (op === 'fix' && currentContent) {
-        enrichedPrompt = `CORRIGE ERRORES en este archivo (${fileName || 'archivo'}):
-PROBLEMA REPORTADO: ${prompt}
-
 CONTENIDO ACTUAL (${currentContent.split('\n').length} líneas):
-\`\`\`
 ${currentContent}
-\`\`\`
 
-Devuelve el archivo completo corregido sin omitir nada.`;
+Devuelve el archivo completo con los cambios aplicados. Sin markdown. Sin explicaciones. Solo el código.`;
     } else {
-        enrichedPrompt = `GENERA ARCHIVO: ${fileName || `archivo.${fileType || 'txt'}`}
+        systemPrompt = SYS_CODEGEN;
+        userPrompt   = `GENERA EL ARCHIVO: ${fileName || `archivo.${fileType || 'txt'}`}
 TIPO: ${fileType || 'texto'}
 REQUISITOS: ${prompt}
 
-Genera el contenido completo del archivo. No pongas explicaciones, solo el contenido.`;
+Genera el contenido completo del archivo. Sin markdown. Sin explicaciones. Solo el contenido.`;
     }
 
     try {
-        console.log(`📝 [generate-file] op:${op} tipo:${fileType} prompt:${prompt?.slice(0,60)}`);
-        const thought = await activeBrain.process(enrichedPrompt, [], null, {
-            userId, email: userEmail, isVip, isCreator,
-            plan: planStatus.plan,
-            fileGenerationMode: true,
-            unlimitedOutput: true,
-            fileName: fileName || `archivo.${fileType || 'txt'}`,
-            hasFile: !!(op === 'edit' || op === 'fix'),
-            fileContent: currentContent || '',
-            fileType: fileType || 'txt'
-        });
+        console.log(`📝 [generate-file] op:${op} tipo:${fileType} file:${fileName} prompt:${prompt?.slice(0,60)}`);
 
-        // Priorizar file_content (devuelto por _handle_file_operation)
-        let content = '';
-        if (thought.file_content && thought.file_content.trim()) {
-            content = thought.file_content;
+        const maxTok = op === 'analyze' ? 4000 : 12000;
+        const raw    = await codegenLLMCall(systemPrompt, userPrompt, maxTok);
+
+        let content;
+        if (op === 'analyze') {
+            content = raw || 'No se pudo analizar el archivo en este momento.';
         } else {
-            content = thought.response || thought.message || '';
+            content = cleanCodeOutput(raw || '');
+            if (!content || content.length < 5) {
+                content = `/* NEXUS CodeGen: Error generando ${fileName || 'archivo'}. Reintenta. */`;
+                console.error(`[generate-file] ⚠️ Sin contenido`);
+            }
         }
 
-        // Guardar en disco si es un archivo real (no solo análisis)
         let savedFileName = null;
         let downloadUrl   = null;
         if (op !== 'analyze') {
             const safeName = (fileName || `nexus_${Date.now()}.${fileType || 'txt'}`).replace(/[^a-zA-Z0-9._-]/g, '_');
             const outPath  = path.join(GENERATED_DIR, safeName);
-            // Extraer solo el código si viene envuelto en bloques markdown
-            let cleanContent = content;
-            const codeMatch = content.match(/```[\w]*\n?([\s\S]*?)```/);
-            if (codeMatch) cleanContent = codeMatch[1];
-            await fs.writeFile(outPath, cleanContent, 'utf-8');
+            await fs.writeFile(outPath, content, 'utf-8');
             savedFileName = safeName;
             downloadUrl   = `/generated/${safeName}`;
-
-            // Auto-limpiar archivos viejos (> 1 hora)
             setTimeout(async () => {
                 try {
                     const files = await fs.readdir(GENERATED_DIR);
