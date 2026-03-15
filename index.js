@@ -854,6 +854,138 @@ app.post('/api/feedback', async (req, res) => {
     catch (error) { res.status(500).json({ error:error.message }); }
 });
 
+
+// ══════════════════════════════════════════════════════════════════
+//  INTEGRACIÓN UPGAMES — NEXUS ve la página en tiempo real
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/upgames/evento
+ * UpGames envía eventos de comportamiento del usuario aquí.
+ * Tipos: search | view | download | favorite | unfavorite | category
+ */
+app.post('/api/upgames/evento', async (req, res) => {
+    const { usuario, tipo, datos, ts } = req.body;
+    if (!usuario || !tipo) return res.status(400).json({ error: 'usuario y tipo son requeridos' });
+    const tiposValidos = ['search','view','download','favorite','unfavorite','category'];
+    if (!tiposValidos.includes(tipo)) return res.status(400).json({ error: 'tipo de evento invalido' });
+    const evento = { usuario, tipo, datos: datos || {}, ts: ts ? new Date(ts) : new Date() };
+    if (db) {
+        try {
+            await db.collection('upgames_eventos').insertOne(evento);
+            db.collection('upgames_eventos').createIndex({ usuario: 1, ts: -1 }).catch(()=>{});
+            db.collection('upgames_eventos').createIndex({ tipo: 1, ts: -1 }).catch(()=>{});
+            db.collection('upgames_eventos').createIndex({ ts: 1 },{ expireAfterSeconds: 60*60*24*90 }).catch(()=>{});
+        } catch(e) { console.error('[upgames/evento]', e.message); }
+    }
+    if (tipo === 'search' && datos?.query) {
+        brainBase.learn(`El usuario buscó en UpGames: "${datos.query}"`, 'Registrado en perfil', true, []).catch(()=>{});
+    }
+    res.json({ ok: true });
+});
+
+/**
+ * GET /api/upgames/perfil/:usuario
+ * Perfil de gustos calculado desde eventos. Usado por UpGames para reordenar el feed.
+ */
+app.get('/api/upgames/perfil/:usuario', async (req, res) => {
+    const { usuario } = req.params;
+    if (!usuario) return res.status(400).json({ error: 'usuario requerido' });
+    if (!db) return res.json({ categorias: [], tags: [], recientes: [], totalEventos: 0 });
+    try {
+        const desde = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        const eventos = await db.collection('upgames_eventos')
+            .find({ usuario, ts: { $gte: desde } })
+            .sort({ ts: -1 }).limit(500).toArray();
+        if (!eventos.length) return res.json({ categorias: [], tags: [], recientes: [], totalEventos: 0 });
+
+        const PESOS = { download: 10, favorite: 8, view: 3, search: 2, category: 5, unfavorite: -4 };
+        const catMap = {};
+        const tagMap = {};
+        const recientes = [];
+
+        for (const ev of eventos) {
+            const peso = PESOS[ev.tipo] || 1;
+            const d = ev.datos || {};
+            if (d.category) catMap[d.category] = (catMap[d.category] || 0) + peso;
+            if (Array.isArray(d.tags)) d.tags.forEach(t => { if(t) tagMap[t] = (tagMap[t]||0)+1; });
+            if (recientes.length < 20 && d.itemId) recientes.push({ itemId: d.itemId, title: d.title||'', tipo: ev.tipo, ts: ev.ts });
+        }
+
+        const categorias = Object.entries(catMap).map(([nombre, peso]) => ({ nombre, peso })).sort((a,b)=>b.peso-a.peso);
+        const tags = Object.entries(tagMap).map(([tag, count]) => ({ tag, count })).sort((a,b)=>b.count-a.count).slice(0,20);
+        res.json({ usuario, categorias, tags, recientes, totalEventos: eventos.length });
+    } catch(e) { console.error('[upgames/perfil]', e.message); res.status(500).json({ error: 'Error calculando perfil' }); }
+});
+
+/**
+ * POST /api/upgames/recomendar
+ * NEXUS calcula recomendaciones reales desde el perfil + llama al backend de UpGames.
+ */
+app.post('/api/upgames/recomendar', requireAuth, async (req, res) => {
+    const { usuario, mensaje } = req.body;
+    if (!usuario) return res.status(400).json({ error: 'usuario requerido' });
+    const UPGAMES_API = process.env.UPGAMES_API_URL || 'https://backendapp-037y.onrender.com';
+    try {
+        // 1. Calcular perfil del usuario
+        let perfil = { categorias: [], tags: [], recientes: [] };
+        if (db) {
+            const desde = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+            const eventos = await db.collection('upgames_eventos')
+                .find({ usuario, ts: { $gte: desde } }).sort({ ts: -1 }).limit(300).toArray();
+            const PESOS = { download: 10, favorite: 8, view: 3, search: 2, category: 5 };
+            const catMap = {}; const tagMap = {};
+            for (const ev of eventos) {
+                const peso = PESOS[ev.tipo] || 1;
+                const d = ev.datos || {};
+                if (d.category) catMap[d.category] = (catMap[d.category]||0) + peso;
+                if (Array.isArray(d.tags)) d.tags.forEach(t => { if(t) tagMap[t] = (tagMap[t]||0)+1; });
+            }
+            perfil.categorias = Object.entries(catMap).map(([n,p])=>({nombre:n,peso:p})).sort((a,b)=>b.peso-a.peso);
+            perfil.tags = Object.entries(tagMap).map(([t,c])=>({tag:t,count:c})).sort((a,b)=>b.count-a.count);
+            perfil.recientes = eventos.filter(e=>e.datos?.itemId).slice(0,10).map(e=>e.datos.itemId);
+        }
+
+        // 2. Llamar a UpGames con el perfil
+        const params = new URLSearchParams();
+        const catQuery = perfil.categorias.slice(0,4).map(c=>`${c.nombre}:${c.peso}`).join(',');
+        const tagQuery = perfil.tags.slice(0,8).map(t=>t.tag).join(',');
+        const excluirQuery = perfil.recientes.slice(0,15).join(',');
+        if (catQuery)    params.set('categorias', catQuery);
+        if (tagQuery)    params.set('tags', tagQuery);
+        if (excluirQuery) params.set('excluir', excluirQuery);
+        params.set('limite', '8');
+
+        const url = `${UPGAMES_API}/items/recomendados/${encodeURIComponent(usuario)}?${params.toString()}`;
+        const resp = await axios.get(url, { timeout: 8000 });
+        const items = resp.data?.items || [];
+
+        // 3. Respuesta natural del brain si hay mensaje
+        let respuestaNatural = null;
+        if (mensaje && items.length > 0) {
+            const contextoItems = items.map(i=>`- "${i.title}" (${i.category}) — ${i.descargasEfectivas||0} descargas`).join('\n');
+            const thought = await brainVip.process(mensaje, [], null, {
+                upgames_context: true,
+                items_disponibles: contextoItems,
+                perfil_usuario: {
+                    categorias_favoritas: perfil.categorias.slice(0,3).map(c=>c.nombre),
+                    tags_favoritos: perfil.tags.slice(0,5).map(t=>t.tag)
+                }
+            });
+            respuestaNatural = thought.response || thought.message || null;
+        }
+
+        res.json({
+            ok: true, items,
+            perfil: { categoriasFavoritas: perfil.categorias.slice(0,3), tagsFavoritos: perfil.tags.slice(0,5) },
+            respuestaNatural
+        });
+    } catch(e) {
+        console.error('[upgames/recomendar]', e.message);
+        res.status(500).json({ error: 'Error obteniendo recomendaciones' });
+    }
+});
+
 app.get('/api/stats', async (req, res) => {
     try {
         const neural = await brainBase.getStats();
