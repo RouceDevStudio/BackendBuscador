@@ -54,7 +54,7 @@
   /* Layout */
   --header-h:    54px;
   --nav-h:       62px;
-  --app-h:       100vh;
+  --app-h:       100dvh; /* dvh se adapta al teclado en móvil */
 
   /* Gradientes recurrentes */
   --grad-g:  linear-gradient(135deg, #5EFF43, #00f2ff);
@@ -453,42 +453,154 @@ body::before {
   padding: 10px 12px 4px;
   animation: msgIn .25s ease both;
 }
-.msg.user  { flex-direction: row-reverse; }
+/* Soporte para ambas convenciones del HTML */
+.msg.user,
+.msg-user  { flex-direction: row-reverse; }
 
 .msg-avatar {
   width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 800;
 }
-.msg.user .msg-avatar {
+.msg.user .msg-avatar,
+.msg-user .msg-avatar {
   background: var(--grad-gd);
   border: 1px solid var(--border-g);
   color: var(--g);
 }
-.msg.assistant .msg-avatar {
+.msg.assistant .msg-avatar,
+.msg-ai .msg-avatar {
   background: var(--bg2);
   border: 1px solid var(--border2);
   color: var(--cy);
   font-size: 11px;
 }
 
-.msg-bubble {
-  max-width: 82%; padding: 10px 13px;
-  border-radius: var(--r-lg); line-height: 1.6;
-  font-size: 14px;
+/* Nombre del remitente */
+.msg-name {
+  font-size: 10px; font-weight: 700;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: .06em; text-transform: uppercase;
+  margin-bottom: 3px;
 }
-.msg.user .msg-bubble {
+.msg-user .msg-name { color: var(--text3); }
+.msg-ai   .msg-name { color: var(--g); }
+
+/* Timestamp */
+.msg-ts {
+  margin-left: auto;
+  font-size: 10px; color: var(--text3);
+  font-family: 'Space Mono', monospace;
+  flex-shrink: 0;
+}
+
+/* Header row de mensaje (avatar + nombre + timestamp) */
+.msg-header {
+  display: flex; align-items: center; gap: 9px;
+  margin-bottom: 8px;
+}
+
+.msg-bubble {
+  max-width: 85%;
+  padding: 10px 13px;
+  border-radius: var(--r-lg);
+  line-height: 1.65;
+  font-size: 14px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.msg.user .msg-bubble,
+.msg-user .msg-bubble {
   background: var(--g-dim);
   border: 1px solid var(--border-g);
   border-bottom-right-radius: 4px;
   color: var(--text);
 }
-.msg.assistant .msg-bubble {
+.msg.assistant .msg-bubble,
+.msg-ai .msg-bubble {
   background: var(--bg2);
   border: 1px solid var(--border2);
   border-bottom-left-radius: 4px;
   color: var(--text);
+  /* padding-left para alinearse con el layout de lista del HTML actual */
+  padding-left: 39px;
 }
+
+/* Código inline y bloques dentro de burbujas */
+.msg-bubble code {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: var(--cy);
+}
+.msg-bubble pre {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 10px 0;
+  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  color: var(--cy);
+  line-height: 1.6;
+  white-space: pre;
+}
+.msg-bubble a { color: var(--cy); text-decoration: underline; }
+.msg-bubble strong { color: var(--text); font-weight: 700; }
+
+/* Botón copiar mensaje */
+.msg-copy-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 8px; margin-left: 39px;
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 99px;
+  font-size: 11px; font-weight: 600; color: var(--text3);
+  cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.msg-copy-btn svg { width: 12px; height: 12px; fill: currentColor; }
+.msg-copy-btn:hover { border-color: rgba(94,255,67,.25); color: var(--g); }
+.msg-copy-btn.copied { color: var(--g); border-color: rgba(94,255,67,.3); }
+
+/* Error de mensaje */
+.msg-error {
+  padding: 12px 16px;
+  background: rgba(255,67,67,.06);
+  border-bottom: 1px solid rgba(255,67,67,.12);
+  font-size: 13px; color: var(--hot);
+}
+
+/* Thinking bubble */
+.thinking-bubble {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding-left: 39px;
+}
+.thinking-bar { display: flex; gap: 5px; }
+.thinking-bar span {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--g);
+  animation: thinkBounce .8s ease-in-out infinite;
+}
+.thinking-bar span:nth-child(2) { animation-delay: .15s; background: var(--cy); }
+.thinking-bar span:nth-child(3) { animation-delay: .3s; }
+.elapsed { font-size: 11px; color: var(--text3); font-family: 'Space Mono', monospace; }
+
+/* Neural chips */
+.neural-chips { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 39px; margin-top: 8px; }
+.chip-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 9px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 99px;
+  font-size: 10px; color: var(--text2);
+  font-family: 'Space Mono', monospace;
+}
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── CARDS DE JUEGOS en el chat (nuevo) ──────────────── */
 .nx-game-cards {
@@ -579,6 +691,7 @@ body::before {
   background: rgba(7,7,15,.96);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(16px);
+  /* Safe area para iPhones con notch */
   padding-bottom: max(10px, env(safe-area-inset-bottom));
   position: relative;
 }
@@ -1139,3 +1252,75 @@ body::before {
   box-shadow: 0 3px 12px rgba(94,255,67,.2); transition: opacity .15s;
 }
 .nx-next:hover { opacity: .9; }
+
+/* ── RESPONSIVE MÓVIL ────────────────────────────────── */
+
+/* Pantallas muy pequeñas (< 380px) */
+@media (max-width: 380px) {
+  /* Header: ocultar el brand-sub y reducir gaps */
+  .brand-sub { display: none; }
+  .brand-name { font-size: 13px; }
+  .logo { gap: 6px; }
+  .header { padding: 0 10px; }
+  .header-right { gap: 4px; }
+
+  /* Status pill: ocultar texto, solo el dot */
+  .status-pill span:last-child { display: none; }
+
+  /* Thinking pill: solo orbs */
+  .thinking-pill { padding: 5px 8px; font-size: 0; gap: 0; }
+  .thinking-orbs { gap: 3px; }
+
+  /* Brain badge: solo dot */
+  .brain-ver-badge { padding: 3px 6px; }
+  #brain-ver-label { display: none; }
+
+  /* Burbujas más anchas en pantallas chicas */
+  .msg-bubble { max-width: 92%; font-size: 13px; }
+  .msg-ai .msg-bubble,
+  .msg.assistant .msg-bubble { padding-left: 10px; }
+  .msg-copy-btn,
+  .thinking-bubble,
+  .neural-chips { padding-left: 10px; }
+
+  /* Input un poco más pequeño */
+  #input { font-size: 13px; padding: 9px 12px; }
+}
+
+/* Pantallas medianas (380–480px) — la mayoría de Android */
+@media (min-width: 381px) and (max-width: 480px) {
+  .msg-bubble { max-width: 88%; }
+}
+
+/* Ajuste cuando el teclado sube — el app no debe crecer */
+@media (max-height: 500px) {
+  .welcome { padding: 16px 20px 10px; }
+  .welcome-glyph { width: 48px; height: 48px; margin-bottom: 10px; }
+  .welcome h2 { font-size: 16px; }
+  .suggestions { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .sug { padding: 8px 10px; }
+}
+
+/* Fix altura dinámica cuando el teclado virtual sube en Android */
+.app {
+  /* Fallback si dvh no está soportado */
+  height: 100vh;
+  height: 100dvh;
+  /* JS sobreescribe con --app-h vía fixHeight() */
+  height: var(--app-h);
+}
+
+/* Codegen panel mobile fix */
+@media (max-width: 480px) {
+  .codegen-panel { height: 100%; }
+  .codegen-body { padding: 12px; gap: 10px; }
+  .codegen-op-row { gap: 4px; }
+  .codegen-op-btn { padding: 5px 10px; font-size: 10px; }
+  .codegen-result-code { font-size: 11px; max-height: 240px; }
+}
+
+/* File preview bar en móvil */
+@media (max-width: 480px) {
+  .file-preview-name { font-size: 10px; }
+  .file-preview-meta { display: none; }
+}
